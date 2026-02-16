@@ -1,0 +1,10 @@
+---
+title: "setup"
+output: html_document
+date: "2026-02-16"
+---
+```{r}
+# set up files. 
+
+```
+

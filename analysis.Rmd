@@ -1,0 +1,24 @@
+---
+title: "analysis"
+output: html_document
+date: "2026-02-16"
+---
+
+```{r}
+
+WKDir ="/Users/z5161362/OneDrive - DPIE/Documents/PhD/spatRast/"
+
+source(paste0(WKDir,"R/cost_distance.r"))
+
+library(sf)
+
+```
+
+```{r}
+# SMALL, MEDIUM, LARGE
+cost <- load_cost_raster(paste0(WKDir,"data/cost.tif"))
+track <- load_tracks(paste0(WKDir,"data/tracks.rds"))
+burn <- burn_tracks(cost, track)
+run_cost_dist(burn, filename= (paste0(WKDir,"output/cost_surface.tif")))
+```
+
