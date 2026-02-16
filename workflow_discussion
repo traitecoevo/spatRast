@@ -1,0 +1,20 @@
+The workflow for this project is as follows:
+
+the data inputs are:
+
+1. a cost geotif (this also can be represented as it's inverse which is called speed.tif) For now we are working with a piece of the whole park which is 28 MB.  The whole park is 6 GB at the desired resolution.  
+
+2. a shape file of all of the paths in and around the park which are defined as cost=0 to access.  this is in the tracks_crop.shp
+
+Both raster and shapefiles are in the same projection, but check this.  
+
+The goal is to calculate the energy cost for all points within the park.
+
+This is a memory and and computational intensive task so the design of the framework needs to be aware of memory and computational limitations.  The project will eventually be scaled up to HPC computer so it should be easy to parellelize.  
+
+Ideally the core of the analysis is a function in R using the terra library and likely the costDist function to calculate the minimum cost path of travel from a single arbitrary point to the path network.  We need to benchmark this in terms of both memory and compute time.  
+
+In this stage of the project we just want the R function.  With test calculations for the following points.  
+
+davisia: 242329.4 6326149 
+banksia: 243198.9 6326506
