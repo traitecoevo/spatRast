@@ -5,6 +5,121 @@ date: "2026-02-16"
 ---
 ```{r}
 # set up files. 
+WKDir ="/Users/z5161362/OneDrive - DPIE/Documents/PhD/spatRast/"
 
+library(sf)
+library(dplyr)
+library(galah)
+library(terra)
+library(raster)
+library(tictoc)
+
+galah_config(email = "jordanmirandamay@gmail.com", atlas = "Australia")
+source(paste0(WKDir,"R/functions.R"))
+
+
+
+#library(parallel)
+#library(tidyterra)
+#library(ggnewscale)
+#library(RColorBrewer)
+#library(beepr)
+#library(gdistance)
+#library(geosphere)
+#library(sf)
+#library(ggplot2)
+#library(lwgeom)
+#library(RColorBrewer)
 ```
+
+```{r}
+# This is National parks official park boundaries
+np <- read_sf(dsn = paste0(WKDir,"data/tenure_npws_estateinternalboundaries/NPWS_EstateInternalBoundaries.shp"))
+np_wol <- subset(np, np$NAME =="Wollemi National Park") #subset out Wollemi np from outer parks
+np_wol_bound <- st_make_valid(np_wol) #fixing broken shapes
+np_wol <- st_union(np_wol_bound) #tuning into one sf 
+np_wol <- st_transform(np_wol, 4326)
+np_wol_buff <- st_buffer(np_wol, dist = 500, nQuadSegs = 30)
+```
+
+```{r}
+# This is a shape from qgis.This is used for downloading occurrence records.
+wol_bound <- read_sf(dsn = paste0(WKDir,"data/bounds/wol_bound_v3.shp")) 
+#plot(wol_bound)
+```
+
+```{r}
+#This is tracks from open street maps, filtered to Wollemi, surprisingly good!
+wol <- read_sf(dsn = paste0(WKDir,"data/tracks/tracks_wol_v2.shp"))
+#plot(wol$geometry)
+
+wol_tr <- st_intersection(wol,np_wol) #np_wol_buff
+
+wol_tr <- wol_tr[wol_tr$highway!="construction",]
+wol_tr$highway_com <- wol_tr$highway
+
+wol_tr <- wol_tr %>%
+  mutate(highway_com = case_when(
+    highway %in% c("primary", "secondary", "tertiary") ~ "road",
+    highway %in% c("residential", "unclassified", "service", "escape") ~ "access track",
+    highway %in% c("track") ~ "track",
+    highway %in% c("footway", "steps", "path") ~ "path",))
+
+#saveRDS(wol_tr, paste0(WKDir,"data/tracks.rds"))
+```
+
+```{r}
+# Getting occurrences records
+occ_wol_inat_all <- galah_call() |>
+  galah_identify("Plantae") |>
+  geolocate(wol_bound) |>
+  galah_filter(
+    dataResourceName == "iNaturalist Australia",
+    imageIDsCount >=1
+  ) |>
+  galah_select(institutionID, informationWithheld, raw_informationWithheld, group = "basic") |>
+  atlas_occurrences()
+
+occ_wol_inat <- occ_wol_inat_all %>% filter(is.na(raw_informationWithheld))
+```
+
+```{r}
+#turning occurrences records into shape file for compatibility
+occ_wol_sp <- galah_record_to_sf (occ_wol_inat)
+#filtering to match national park shapefile
+occ_wol <- st_filter(occ_wol_sp, np_wol)
+```
+
+```{r}
+slope_wol <- terra::rast(paste0(WKDir, "data/processing/wol/slope_wol.tif")) # slope from Elvis DEM tiles
+
+# Transfering data to DEM CRS = 4283
+np_wol_gda94 <- st_transform(np_wol, crs = crs(slope_wol)) # Outline
+np_wol_buff_gda94 <- st_transform(np_wol_buff, crs = crs(slope_wol)) # Buffer
+wol_tr_gda94 <- st_transform(wol_tr, crs = crs(slope_wol)) # Tracks
+occ_wol_gda94 <- st_transform(occ_wol, crs = crs(slope_wol)) # iNaturalist occurrences
+
+# saveRDS(wol_tr_gda94,(paste0(WKDir, "data/processing/wol/tracks_wol.rds")))
+```
+
+
+```{r}
+# Transferring via Toblers Hiking function
+f_exp <- function(x) {
+  ifelse(x > 70, NA, 1/(6 * exp(-3.5 * abs(x/100 + 0.05))) )
+}
+
+cost <- app(slope_wol, f_exp,
+             filename=paste0(WKDir,"data/processing/wol/cost.tif"),
+             overwrite=TRUE)
+plot(cost)
+```
+
+
+
+
+
+
+
+
 

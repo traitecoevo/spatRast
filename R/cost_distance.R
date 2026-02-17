@@ -135,7 +135,7 @@ burn_tracks <- function(cost_raster, tracks, target_value = 0, verbose = TRUE) {
 #' @param verbose Logical. Print timing info.
 #' @return A named list with \code{surface} (SpatRaster) and \code{benchmark}.
 run_cost_dist <- function(cost_with_tracks, target_value = 0, maxiter = 50,
-                          filename = "", verbose = TRUE) {
+                          filename = "", verbose = TRUE, overwrite=TRUE) {
   if (verbose) message("Running costDist (maxiter=", maxiter, ")...")
   mem_before <- gc(reset = TRUE)
   timing <- system.time({
@@ -143,7 +143,8 @@ run_cost_dist <- function(cost_with_tracks, target_value = 0, maxiter = 50,
       cost_with_tracks,
       target = target_value,
       maxiter = maxiter,
-      filename = filename
+      filename = filename,
+      overwrite=TRUE
     )
   })
   mem_after <- gc()
@@ -294,7 +295,7 @@ calc_cost_to_tracks <- function(
 #' Visualises the cost surface after tracks have been burned in, highlighting
 #' the track cells (target_value) in a distinct colour.
 #'
-#' @param cost_with_tracks SpatRaster. Output from \code{burn_tracks()}.
+#' @param cost_with_tracks SpatRaster. Output from \code{burn_tracks()}. # rplace with cost_rast
 #' @param tracks Optional SpatVector or sf to overlay as lines.
 #' @param query_points Optional data.frame with x, y (and optionally name) cols.
 #' @param title Character. Plot title.

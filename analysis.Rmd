@@ -5,20 +5,120 @@ date: "2026-02-16"
 ---
 
 ```{r}
-
 WKDir ="/Users/z5161362/OneDrive - DPIE/Documents/PhD/spatRast/"
 
 source(paste0(WKDir,"R/cost_distance.r"))
+```
 
-library(sf)
+```{r}
+# Workflow
+# calc_cost_to_tracks this one does eveything?
+
+cost <- load_cost_raster(paste0(WKDir,"data/processing/wol/cost.tif"))
+track <- load_tracks(paste0(WKDir,"data/processing/wol/tracks.rds"))
+burn <- burn_tracks(cost, track)
+
+# Raster CRS: GDA94 / MGA zone 56 (EPSG:28356)
+# Tracks CRS: GDA94 / MGA zone 56 (EPSG:28356)
+# Raster dimensions: 63475 rows x 44573 cols (2,829,271,175 cells)
+# Resolution: 2 x 2 m
+# Rasterizing tracks onto cost surface...
+# Error in matrix(v, ncol = nlyr(x)) : data is too long
+
+
+run_cost_dist(burn, filename= (paste0(WKDir,"output/cost_surface.tif")))
 
 ```
 
 ```{r}
-# SMALL, MEDIUM, LARGE
-cost <- load_cost_raster(paste0(WKDir,"data/cost.tif"))
-track <- load_tracks(paste0(WKDir,"data/tracks.rds"))
-burn <- burn_tracks(cost, track)
-run_cost_dist(burn, filename= (paste0(WKDir,"output/cost_surface.tif")))
+# SMALL
+
+# Creating small box
+bbox <- ext(150.230, 150.280, -33.190, -33.140)
+bbox_vect <- as.polygons(bbox)
+crs(bbox_vect) <- "EPSG:4283"  
+bbox_proj <- project(bbox_vect, crs(cost))
+cost_crop_sm <- crop(cost, bbox_proj, mask = TRUE) # Cost
+wol_tr_crop_sm <- st_crop(wol_tr_gda94, bbox_proj, mask = TRUE) # Tracks
+plot(cost_crop_sm)
+
+cost_sm <- load_cost_raster(cost_crop_sm)
+track_sm <- load_tracks(wol_tr_crop_sm)
+burn_sm <- burn_tracks(cost_sm, track_sm)
+cost_surface_sm<- run_cost_dist(burn_sm, filename= (paste0(WKDir,"output/cost_surface_sm.tif")), overwrite=TRUE)
+cost_surface_sm <- terra::rast(paste0(WKDir,"output/cost_surface_sm.tif"))
+plot_cost_with_tracks(cost_surface_sm, tracks = track_sm, filename = "output/plots/cost_rast_sm.png")
+
+# Raster CRS: GDA94 / MGA zone 56 (EPSG:28356)
+# Tracks CRS: GDA94 / MGA zone 56 (EPSG:28356)
+# Raster dimensions: 2834 rows x 2405 cols (6,815,770 cells)
+# Resolution: 2 x 2 m
+# Rasterizing tracks onto cost surface...
+# Track cells rasterized: 14,905 (0.22% of raster)
+# Running costDist (maxiter=50)...
+# costDist completed in 11.26 seconds
+# Estimated peak memory: 143.9 MB
+```
+
+
+```{r}
+# MEDIUM
+
+# Creating medium box
+bbox <- ext(150.205, 150.305, -33.215, -33.115)
+bbox_vect <- as.polygons(bbox)
+crs(bbox_vect) <- "EPSG:4283"  
+bbox_proj <- project(bbox_vect, crs(cost))
+cost_crop_mm <- crop(cost, bbox_proj, mask = TRUE) # Cost
+wol_tr_crop_mm <- st_crop(wol_tr_gda94, bbox_proj, mask = TRUE) # Tracks
+plot(cost_crop_mm)
+
+cost_mm <- load_cost_raster(cost_crop_mm)
+track_mm <- load_tracks(wol_tr_crop_mm)
+burn_mm <- burn_tracks(cost_mm, track_mm)
+cost_surface_mm<- run_cost_dist(burn_mm, filename= (paste0(WKDir,"output/cost_surface_mm.tif")), overwrite=TRUE)
+cost_surface_mm <- terra::rast(paste0(WKDir,"output/cost_surface_mm.tif"))
+plot_cost_with_tracks(cost_surface_mm, tracks = track_mm, filename = "output/plots/cost_rast_mm.png")
+
+
+# Raster CRS: GDA94 / MGA zone 56 (EPSG:28356)
+# Tracks CRS: GDA94 / MGA zone 56 (EPSG:28356)
+# Raster dimensions: 5668 rows x 4810 cols (27,263,080 cells)
+# Resolution: 2 x 2 m
+# Rasterizing tracks onto cost surface...
+# Track cells rasterized: 25,634 (0.09% of raster)
+# Running costDist (maxiter=50)...
+# costDist completed in 40.89 seconds
+# Estimated peak memory: 143.8 MB
+```
+
+```{r}
+# LARGE
+
+# Creating large box
+bbox <- ext(150.155, 150.355, -33.265, -33.065)
+bbox_vect <- as.polygons(bbox)
+crs(bbox_vect) <- "EPSG:4283"  
+bbox_proj <- project(bbox_vect, crs(cost))
+cost_crop_lg <- crop(cost, bbox_proj, mask = TRUE) # Cost
+wol_tr_crop_lg <- st_crop(wol_tr_gda94, bbox_proj, mask = TRUE) # Tracks
+plot(cost_crop_lg)
+
+cost_lg <- load_cost_raster(cost_crop_lg)
+track_lg <- load_tracks(wol_tr_crop_lg)
+burn_lg <- burn_tracks(cost_lg, track_lg)
+cost_surface_lg<- run_cost_dist(burn_lg, filename= (paste0(WKDir,"output/cost_surface_lg.tif")), overwrite=TRUE)
+cost_surface_lg <- terra::rast(paste0(WKDir,"output/cost_surface_lg.tif"))
+plot_cost_with_tracks(cost_surface_lg, tracks = track_mm, filename = "output/plots/cost_rast_lg.png")
+
+# Raster CRS: GDA94 / MGA zone 56 (EPSG:28356)
+# Tracks CRS: GDA94 / MGA zone 56 (EPSG:28356)
+# Raster dimensions: 11336 rows x 9620 cols (109,052,320 cells)
+# Resolution: 2 x 2 m
+# Rasterizing tracks onto cost surface...
+# Track cells rasterized: 63,079 (0.06% of raster)
+# Running costDist (maxiter=50)...
+# costDist completed in 208.72 seconds
+# Estimated peak memory: 192.1 MB
 ```
 

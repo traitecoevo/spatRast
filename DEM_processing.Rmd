@@ -1,0 +1,32 @@
+---
+title: "DEM_processing"
+output: html_document
+date: "2026-02-16"
+---
+
+```{r}
+# This section just runs once. It takes the DEM and saves a slope rater than can be loaded in, in the next section.
+file = "DEM/Elevation/2 Metre/"
+filename =list.files(path=paste0(WKDir,file), pattern = ".tif", full.names = FALSE, recursive = FALSE)
+rasters_2 <- lapply(filename, function(fn) terra::rast(paste0(WKDir, file, fn)))
+merged_2  <- do.call(mosaic, c(rasters_2, fun=mean))
+
+file = "DEM/Elevation/1 Metre/"
+filename =list.files(path=paste0(WKDir,file), pattern = ".tif", full.names = FALSE, recursive = FALSE)
+rasters_1 <- lapply(filename, function(fn) terra::rast(paste0(WKDir, file, fn)))
+merged_1  <- do.call(mosaic, c(rasters_1, fun=mean))
+ras_1 <- terra::aggregate(merged_1, fact = 2, fun = mean)
+
+stiched <- terra::merge(ras_1, merged_2)
+rm(ras_1, merged_2)
+
+np_wol_buff_gda94 <- sf::st_transform(np_wol_buff, crs = crs(stiched))
+stiched_wol <- terra::crop(stiched, vect(np_wol_buff_matched), mask=TRUE)
+slope <- terra::terrain(stiched_wol, v="slope", unit="degrees", neighbors=8)
+
+#terra::writeRaster(slope, paste0(WKDir, "DEM/slope.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
+slope <- terra::rast(paste0(WKDir, "data/DEM/slope.tif")) # slope from Elvis DEM tiles
+#slope_wol_save <- terra::crop(slope, vect(np_wol_buff_gda94), mask=TRUE) # This line takes a while. Try and keep loaded
+#terra::writeRaster(slope_wol_save, paste0(WKDir, "DEM/slope_wol.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
+```
+
