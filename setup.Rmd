@@ -39,7 +39,8 @@ np_wol <- subset(np, np$NAME =="Wollemi National Park") #subset out Wollemi np f
 np_wol_bound <- st_make_valid(np_wol) #fixing broken shapes
 np_wol <- st_union(np_wol_bound) #tuning into one sf 
 np_wol <- st_transform(np_wol, 4326)
-np_wol_buff <- st_buffer(np_wol, dist = 500, nQuadSegs = 30)
+np_wol_buff <- st_buffer(np_wol, dist = 2000, nQuadSegs = 30) # changed from 500 to 2000
+np_wol_buff <- st_sfc(st_polygon(list(np_wol_buff[[1]][[1]])), crs = st_crs(np_wol_buff))
 ```
 
 ```{r}
@@ -53,7 +54,7 @@ wol_bound <- read_sf(dsn = paste0(WKDir,"data/bounds/wol_bound_v3.shp"))
 wol <- read_sf(dsn = paste0(WKDir,"data/tracks/tracks_wol_v2.shp"))
 #plot(wol$geometry)
 
-wol_tr <- st_intersection(wol,np_wol) #np_wol_buff
+wol_tr <- st_intersection(wol,np_wol_buff) 
 
 wol_tr <- wol_tr[wol_tr$highway!="construction",]
 wol_tr$highway_com <- wol_tr$highway
@@ -90,9 +91,40 @@ occ_wol_sp <- galah_record_to_sf (occ_wol_inat)
 occ_wol <- st_filter(occ_wol_sp, np_wol)
 ```
 
-```{r}
-slope_wol <- terra::rast(paste0(WKDir, "data/processing/wol/slope_wol.tif")) # slope from Elvis DEM tiles
 
+```{r}
+#This section just runs once. It takes the DEM and saves a slope rater than can be loaded in, in the next section.
+#only run once, takes a long time and is memory intensive.
+file = "data/DEM/Elevation/2 Metre/"
+filename =list.files(path=paste0(WKDir,file), pattern = ".tif", full.names = FALSE, recursive = FALSE)
+rasters_2 <- lapply(filename, function(fn) terra::rast(paste0(WKDir, file, fn)))
+merged_2  <- do.call(mosaic, c(rasters_2, fun=mean))
+
+file = "data/DEM/Elevation/1 Metre/"
+filename =list.files(path=paste0(WKDir,file), pattern = ".tif", full.names = FALSE, recursive = FALSE)
+rasters_1 <- lapply(filename, function(fn) terra::rast(paste0(WKDir, file, fn)))
+merged_1  <- do.call(mosaic, c(rasters_1, fun=mean))
+ras_1 <- terra::aggregate(merged_1, fact = 2, fun = mean)
+
+stiched <- terra::merge(ras_1, merged_2)
+terra::writeRaster(stiched, paste0(WKDir, "data/DEM/stiched.tif"), overwrite = TRUE) #temp file until storage issues have been solved. 
+rm(ras_1, merged_2, stiched,)
+
+np_wol_buff_gda94 <- sf::st_transform(np_wol_buff, crs = crs(stiched))
+stiched_wol <- terra::crop(stiched, vect(np_wol_buff_gda94), mask=TRUE)
+slope <- terra::terrain(stiched_wol, v="slope", unit="degrees", neighbors=8)
+
+#terra::writeRaster(slope, paste0(WKDir, "data/DEM/slope.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
+slope <- terra::rast(paste0(WKDir, "data/DEM/slope.tif")) # slope from Elvis DEM tiles
+slope_wol_save <- terra::crop(slope, vect(np_wol_buff_gda94), mask=TRUE) # This line takes a while. Try and keep loaded
+#terra::writeRaster(slope_wol_save, paste0(WKDir, "data/DEM/slope_wol.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
+rm(ras_1, merged_2, stiched, slope_wol_save)
+```
+
+
+
+```{r}
+slope_wol <- terra::rast(paste0(WKDir, "data/DEM/slope.tif")) # slope from Elvis DEM tiles
 # Transfering data to DEM CRS = 4283
 np_wol_gda94 <- st_transform(np_wol, crs = crs(slope_wol)) # Outline
 np_wol_buff_gda94 <- st_transform(np_wol_buff, crs = crs(slope_wol)) # Buffer
@@ -114,12 +146,6 @@ cost <- app(slope_wol, f_exp,
              overwrite=TRUE)
 plot(cost)
 ```
-
-
-
-
-
-
 
 
 

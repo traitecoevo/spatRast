@@ -62,13 +62,13 @@ load_tracks <- function(tracks, verbose = TRUE) {
 #' Rasterizes a track network onto the cost surface, setting track cells to
 #' \code{target_value}. This prepares the raster for \code{terra::costDist()}.
 #'
-#' @param cost_raster SpatRaster. The friction/cost surface.
-#' @param tracks SpatVector. The track/path network.
+#' @param cost_raster SpatRaster. The cost surface.
+#' @param tracks SpatVector.The track/path network.
 #' @param target_value Numeric. Value to assign to track cells (default 0).
+#' @param filename Character. Output filename. If empty, a temp file is used but this can create memory issues in larger files.
 #' @param verbose Logical. Print info messages.
-#' @return A SpatRaster with track cells set to \code{target_value}.
-burn_tracks <- function(cost_raster, tracks, target_value = 0, verbose = TRUE) {
-
+#' @return A SpatRaster with track cells set to \code{target_value}. # in larger files prevent assigneing and rely on file produced for memory
+burn_tracks <- function(cost_raster, tracks, target_value = 0, filename = "", verbose = TRUE) {
   # CRS check
   raster_crs <- terra::crs(cost_raster, describe = TRUE)
   track_crs <- terra::crs(tracks, describe = TRUE)
@@ -97,18 +97,21 @@ burn_tracks <- function(cost_raster, tracks, target_value = 0, verbose = TRUE) {
 
   # Rasterize tracks
   if (verbose) message("Rasterizing tracks onto cost surface...")
-  cost_with_tracks <- terra::rasterize(
+  # Create a raster of just the tracks, with the target value
+  # Cost_raster as a template
+  track_rast <- terra::rasterize(
     tracks,
     cost_raster,
     field = target_value,
-    update = TRUE,
     touches = TRUE
   )
+  # Then merge with cost raster
+  if (verbose) message("Merging tracks with cost surface...")
+  cost_with_tracks <- terra::cover(track_rast, cost_raster, filename = filename, overwrite = TRUE) 
 
-  # Count track cells
-  n_track_cells <- sum(
-    terra::values(cost_with_tracks) == target_value, na.rm = TRUE
-  )
+  freq_tracks <- terra::freq(cost_with_tracks, value = target_value)
+  n_track_cells <- if (nrow(freq_tracks) > 0) freq_tracks[1, "count"] else 0 # Count track cells 
+
   if (verbose) {
     message(
       "Track cells rasterized: ", format(n_track_cells, big.mark = ","),
@@ -135,7 +138,7 @@ burn_tracks <- function(cost_raster, tracks, target_value = 0, verbose = TRUE) {
 #' @param verbose Logical. Print timing info.
 #' @return A named list with \code{surface} (SpatRaster) and \code{benchmark}.
 run_cost_dist <- function(cost_with_tracks, target_value = 0, maxiter = 50,
-                          filename = "", verbose = TRUE, overwrite=TRUE) {
+                          filename = "", verbose = TRUE, overwrite = TRUE) {
   if (verbose) message("Running costDist (maxiter=", maxiter, ")...")
   mem_before <- gc(reset = TRUE)
   timing <- system.time({
@@ -144,7 +147,7 @@ run_cost_dist <- function(cost_with_tracks, target_value = 0, maxiter = 50,
       target = target_value,
       maxiter = maxiter,
       filename = filename,
-      overwrite=TRUE
+      overwrite = TRUE
     )
   })
   mem_after <- gc()
@@ -187,7 +190,7 @@ extract_point_costs <- function(cost_surface, query_points, verbose = TRUE) {
   }
 
   # Check points fall within raster extent
-  rast_ext <- as.vector(terra::ext(cost_surface))  # xmin, xmax, ymin, ymax
+  rast_ext <- as.vector(terra::ext(cost_surface)) # xmin, xmax, ymin, ymax
   in_extent <- xy_mat[, 1] >= rast_ext[1] & xy_mat[, 1] <= rast_ext[2] &
     xy_mat[, 2] >= rast_ext[3] & xy_mat[, 2] <= rast_ext[4]
   if (any(!in_extent)) {
@@ -245,15 +248,14 @@ extract_point_costs <- function(cost_surface, query_points, verbose = TRUE) {
 #' print(result$benchmark)
 #' }
 calc_cost_to_tracks <- function(
-    cost_raster,
-    tracks,
-    query_points = NULL,
-    target_value = 0,
-    maxiter = 50,
-    filename = "",
-    verbose = TRUE
+  cost_raster,
+  tracks,
+  query_points = NULL,
+  target_value = 0,
+  maxiter = 50,
+  filename = "",
+  verbose = TRUE
 ) {
-
   # 1. Load inputs
   cost_raster <- load_cost_raster(cost_raster, verbose = verbose)
   tracks <- load_tracks(tracks, verbose = verbose)
@@ -275,7 +277,8 @@ calc_cost_to_tracks <- function(
   point_costs <- NULL
   if (!is.null(query_points)) {
     point_costs <- extract_point_costs(
-      cd_result$surface, query_points, verbose = verbose
+      cd_result$surface, query_points,
+      verbose = verbose
     )
   }
 
@@ -290,12 +293,9 @@ calc_cost_to_tracks <- function(
 
 # ---- Plotting ------------------------------------------------------------
 
-#' Plot cost raster with burned-in tracks
+#' Plot cost raster with tracks
 #'
-#' Visualises the cost surface after tracks have been burned in, highlighting
-#' the track cells (target_value) in a distinct colour.
-#'
-#' @param cost_with_tracks SpatRaster. Output from \code{burn_tracks()}. # rplace with cost_rast
+#' @param cost_with_tracks SpatRaster. Output from \code{run_cost_dist()}.
 #' @param tracks Optional SpatVector or sf to overlay as lines.
 #' @param query_points Optional data.frame with x, y (and optionally name) cols.
 #' @param title Character. Plot title.
@@ -304,16 +304,15 @@ calc_cost_to_tracks <- function(
 #' @param height Numeric. Plot height in pixels (default 1100).
 #' @param res Numeric. Plot resolution in DPI (default 150).
 plot_cost_with_tracks <- function(
-    cost_with_tracks,
-    tracks = NULL,
-    query_points = NULL,
-    title = "Cost Surface with Burned-in Tracks",
-    filename = "",
-    width = 1400,
-    height = 1100,
-    res = 150
+  cost_with_tracks,
+  tracks = NULL,
+  query_points = NULL,
+  title = "Cost Surface with Tracks",
+  filename = "",
+  width = 1400,
+  height = 1100,
+  res = 150
 ) {
-
   if (nchar(filename) > 0) {
     png(filename, width = width, height = height, res = res)
     on.exit(dev.off(), add = TRUE)
@@ -327,9 +326,10 @@ plot_cost_with_tracks <- function(
   cost_masked <- cost_with_tracks
   cost_masked[is_track] <- NA
   plot(cost_masked,
-       main = title,
-       col = grDevices::hcl.colors(50, "YlOrRd", rev = TRUE),
-       legend = TRUE)
+    main = title,
+    col = grDevices::hcl.colors(50, "YlOrRd", rev = TRUE),
+    legend = TRUE
+  )
 
   # Overlay track cells in blue
   track_raster <- cost_with_tracks
@@ -347,11 +347,13 @@ plot_cost_with_tracks <- function(
   # Overlay query points if provided
   if (!is.null(query_points)) {
     points(query_points$x, query_points$y,
-           pch = 21, bg = "cyan", cex = 1.2, lwd = 1.5)
+      pch = 21, bg = "cyan", cex = 1.2, lwd = 1.5
+    )
     if ("name" %in% names(query_points)) {
       text(query_points$x, query_points$y,
-           labels = query_points$name,
-           pos = 4, cex = 0.5, font = 2, offset = 0.3)
+        labels = query_points$name,
+        pos = 4, cex = 0.5, font = 2, offset = 0.3
+      )
     }
   }
 

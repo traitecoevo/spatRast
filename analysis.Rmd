@@ -11,24 +11,91 @@ source(paste0(WKDir,"R/cost_distance.r"))
 ```
 
 ```{r}
+
+#“Distances are multiplied with the friction, thus to get the cost-distance, the friction surface must express the cost per unit distance (speed) of travel”
+
+
 # Workflow
 # calc_cost_to_tracks this one does eveything?
 
 cost <- load_cost_raster(paste0(WKDir,"data/processing/wol/cost.tif"))
 track <- load_tracks(paste0(WKDir,"data/processing/wol/tracks.rds"))
-burn <- burn_tracks(cost, track)
+burn_tracks(cost, track, filename=paste0(WKDir,"output/burn.tif"))
+burn <- terra::rast(paste0(WKDir,"output/burn.tif"))
+# min value   : 0.000000 
+# max value   : 2.300762 
 
-# Raster CRS: GDA94 / MGA zone 56 (EPSG:28356)
-# Tracks CRS: GDA94 / MGA zone 56 (EPSG:28356)
-# Raster dimensions: 63475 rows x 44573 cols (2,829,271,175 cells)
-# Resolution: 2 x 2 m
-# Rasterizing tracks onto cost surface...
-# Error in matrix(v, ncol = nlyr(x)) : data is too long
+run_cost_dist(burn, filename= (paste0(WKDir,"output/cost_surface.tif")), overwrite = TRUE)
 
 
-run_cost_dist(burn, filename= (paste0(WKDir,"output/cost_surface.tif")))
+plot(burn)
 
+cost_surface <- terra::rast(paste0(WKDir,"output/cost_surface.tif"))
+#plot_cost_with_tracks(cost_surface, tracks = track, filename = "output/plots/cost_rast.png")
+#plot(cost_surface)
+
+# Running costDist (maxiter=50)...
+# Warning: [costDist] distance algorithm did not converge
+# costDist completed in 22292.55 seconds
+# Estimated peak memory: 168 MB
+# $surface
+# class       : SpatRaster 
+# size        : 63475, 44573, 1  (nrow, ncol, nlyr)
+# resolution  : 2, 2  (x, y)
+# extent      : 225278, 314424, 6288112, 6415062  (xmin, xmax, ymin, ymax)
+# coord. ref. : GDA94 / MGA zone 56 (EPSG:28356) 
+# source      : cost_surface.tif 
+# varname     : burn 
+# name        :    layer 
+# min value   :    0.000 
+# max value   : 4516.728 
+# 
+# $benchmark
+# $benchmark$elapsed_secs
+# [1] 22292.55
+# 
+# $benchmark$peak_mem_mb
+# [1] 167.9746
+# 
+# $benchmark$raster_dims
+# [1] 63475 44573
+# 
+# $benchmark$n_cells
+# [1] 2829271175
 ```
+
+```{r}
+pts <- do.call(rbind, st_geometry(occ_wol_gda94$geometry)) %>% 
+    as_tibble() %>% setNames(c("x","y"))
+pts_cost <- extract_point_costs(cost_surface, pts)
+occ_wol_gda94 <- cbind(occ_wol_gda94, pts_cost)
+occ_wol_gda94$pts_cost<-round(occ_wol_gda94$pts_cost,1)
+```
+
+
+
+```{r}
+png(paste0(WKDir,"output/plots/cost_rast.png"), width = 12000,height = 8800, res = 300)
+#pdf(paste0(WKDir,"output/plots/cost_rast.pdf"), width = 50,height = 50)
+image(cost_surface,
+    main = "Cost Surface with Tracks",
+    col = grDevices::hcl.colors(50, "YlOrRd", rev = TRUE), colNA = "black",
+    maxcell=100000000,
+    legend = TRUE
+  )
+plot(track, col = "dodgerblue", add = TRUE, legend = FALSE)
+
+points(pts$x, pts$y,
+      pch = 21, bg = "cyan", cex = 1.2, lwd = 1.5)
+text(pts$x, pts$y,
+        labels = occ_wol_gda94$pts_cost,
+        pos = 4, cex = 0.5, font = 2, offset = 0.3)
+dev.off()
+
+hist(occ_wol_gda94$pts_cost)
+```
+
+
 
 ```{r}
 # SMALL
@@ -58,6 +125,7 @@ plot_cost_with_tracks(cost_surface_sm, tracks = track_sm, filename = "output/plo
 # Running costDist (maxiter=50)...
 # costDist completed in 11.26 seconds
 # Estimated peak memory: 143.9 MB
+ext(cost_crop_sm)
 ```
 
 
@@ -109,7 +177,7 @@ track_lg <- load_tracks(wol_tr_crop_lg)
 burn_lg <- burn_tracks(cost_lg, track_lg)
 cost_surface_lg<- run_cost_dist(burn_lg, filename= (paste0(WKDir,"output/cost_surface_lg.tif")), overwrite=TRUE)
 cost_surface_lg <- terra::rast(paste0(WKDir,"output/cost_surface_lg.tif"))
-plot_cost_with_tracks(cost_surface_lg, tracks = track_mm, filename = "output/plots/cost_rast_lg.png")
+plot_cost_with_tracks(cost_surface_lg, tracks = track_lg, filename = "output/plots/cost_rast_lg.png")
 
 # Raster CRS: GDA94 / MGA zone 56 (EPSG:28356)
 # Tracks CRS: GDA94 / MGA zone 56 (EPSG:28356)
@@ -122,3 +190,32 @@ plot_cost_with_tracks(cost_surface_lg, tracks = track_mm, filename = "output/plo
 # Estimated peak memory: 192.1 MB
 ```
 
+```{r}
+# LARGE
+
+# Creating large box
+bbox <- ext(150.155, 150.355, -33.265, -33.065)
+bbox_vect <- as.polygons(bbox)
+crs(bbox_vect) <- "EPSG:4283"  
+bbox_proj <- project(bbox_vect, crs(cost))
+cost_crop_lg <- crop(cost, bbox_proj, mask = TRUE) # Cost
+wol_tr_crop_lg <- st_crop(wol_tr_gda94, bbox_proj, mask = TRUE) # Tracks
+plot(cost_crop_lg)
+
+cost_lg <- load_cost_raster(cost_crop_lg)
+track_lg <- load_tracks(wol_tr_crop_lg)
+burn_lg <- burn_tracks(cost_lg, track_lg)
+cost_surface_lg<- run_cost_dist(burn_lg, filename= (paste0(WKDir,"output/cost_surface_lg.tif")), overwrite=TRUE)
+cost_surface_lg <- terra::rast(paste0(WKDir,"output/cost_surface_lg.tif"))
+plot_cost_with_tracks(cost_surface_lg, tracks = track_lg, filename = "output/plots/cost_rast_lg.png")
+
+# Raster CRS: GDA94 / MGA zone 56 (EPSG:28356)
+# Tracks CRS: GDA94 / MGA zone 56 (EPSG:28356)
+# Raster dimensions: 11336 rows x 9620 cols (109,052,320 cells)
+# Resolution: 2 x 2 m
+# Rasterizing tracks onto cost surface...
+# Track cells rasterized: 63,079 (0.06% of raster)
+# Running costDist (maxiter=50)...
+# costDist completed in 208.72 seconds
+# Estimated peak memory: 192.1 MB
+```
