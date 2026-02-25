@@ -1,6 +1,7 @@
 # cost_distance.R — Functions for cost-distance analysis using terra
 #
 # Decomposed into modular subfunctions:
+#   setup_terra_for_large_rasters() — Configure terra memory and temp folders
 #   load_cost_raster()     — Load and validate a cost raster
 #   load_tracks()          — Load and validate a track network
 #   burn_tracks()          — Rasterize tracks onto cost surface (returns cost_with_tracks)
@@ -11,6 +12,35 @@
 
 
 # ---- Load helpers --------------------------------------------------------
+
+#' Setup terra for large rasters
+#'
+#' Configures terra memory usage and temporary file location.
+#'
+#' @param tempdir Character. Path to a directory with ample space for temp files.
+#' @param memfrac Numeric. Fraction of memory to use (0-0.9).
+#' @param verbose Logical. Print new options.
+#' @return The new terraOptions.
+setup_terra_for_large_rasters <- function(tempdir = NULL, memfrac = 0.6, verbose = TRUE) {
+  opts <- list(memfrac = memfrac)
+  if (!is.null(tempdir)) {
+    if (!dir.exists(tempdir)) dir.create(tempdir, recursive = TRUE)
+    opts$tempdir <- tempdir
+  }
+
+  do.call(terra::terraOptions, opts)
+
+  if (verbose) {
+    curr <- terra::terraOptions()
+    message("Terra configured for large rasters:")
+    message("  - tempdir:  ", curr$tempdir)
+    message("  - memfrac: ", curr$memfrac)
+    message("  - progress:", if (curr$progress > 0) " ON" else " OFF")
+  }
+
+  invisible(terra::terraOptions())
+}
+
 
 #' Load a cost/friction raster
 #'
@@ -68,7 +98,11 @@ load_tracks <- function(tracks, verbose = TRUE) {
 #' @param filename Character. Output filename. If empty, a temp file is used but this can create memory issues in larger files.
 #' @param verbose Logical. Print info messages.
 #' @return A SpatRaster with track cells set to \code{target_value}. # in larger files prevent assigneing and rely on file produced for memory
-burn_tracks <- function(cost_raster, tracks, target_value = 0, filename = "", verbose = TRUE) {
+burn_tracks <- function(cost_raster, tracks, target_value = 0, filename = "", tmp_fn = "", verbose = TRUE) {
+  
+  # # checking and creating temp file
+  # if (nchar(tmp_fn) > 0 && !dir.exists(tmp_fn)) {dir.create(tmp_fn)}
+  
   # CRS check
   raster_crs <- terra::crs(cost_raster, describe = TRUE)
   track_crs <- terra::crs(tracks, describe = TRUE)
@@ -94,7 +128,7 @@ burn_tracks <- function(cost_raster, tracks, target_value = 0, filename = "", ve
     )
     message("Resolution: ", paste(terra::res(cost_raster), collapse = " x "), " m")
   }
-
+  # terra::terraOptions(tempdir = tmp_fn, memfrac = 0.6)
   # Rasterize tracks
   if (verbose) message("Rasterizing tracks onto cost surface...")
   # Create a raster of just the tracks, with the target value
@@ -107,10 +141,10 @@ burn_tracks <- function(cost_raster, tracks, target_value = 0, filename = "", ve
   )
   # Then merge with cost raster
   if (verbose) message("Merging tracks with cost surface...")
-  cost_with_tracks <- terra::cover(track_rast, cost_raster, filename = filename, overwrite = TRUE) 
+  cost_with_tracks <- terra::cover(track_rast, cost_raster, filename = filename, overwrite = TRUE)
 
   freq_tracks <- terra::freq(cost_with_tracks, value = target_value)
-  n_track_cells <- if (nrow(freq_tracks) > 0) freq_tracks[1, "count"] else 0 # Count track cells 
+  n_track_cells <- if (nrow(freq_tracks) > 0) freq_tracks[1, "count"] else 0 # Count track cells
 
   if (verbose) {
     message(
@@ -121,6 +155,11 @@ burn_tracks <- function(cost_raster, tracks, target_value = 0, filename = "", ve
   if (n_track_cells == 0) {
     warning("No track cells were rasterized! Check track geometry and raster extent.")
   }
+  # # Cleanup temp if created
+  # if (nchar(tmp_fn) > 0 && file.exists(tmp_fn) && tmp_fn != filename) {
+  #   if (verbose) message("Cleaning up temp files: ", tmp_fn)
+  #   file.remove(tmp_fn)
+  # }
 
   cost_with_tracks
 }
@@ -137,8 +176,13 @@ burn_tracks <- function(cost_raster, tracks, target_value = 0, filename = "", ve
 #' @param filename Character. Output file for out-of-memory processing.
 #' @param verbose Logical. Print timing info.
 #' @return A named list with \code{surface} (SpatRaster) and \code{benchmark}.
-run_cost_dist <- function(cost_with_tracks, target_value = 0, maxiter = 50,
-                          filename = "", verbose = TRUE, overwrite = TRUE) {
+run_cost_dist <- function(cost_with_tracks, target_value = 0, maxiter = 25,
+                          filename = "", tmp_fn = "", verbose = TRUE, overwrite = TRUE) {
+  
+  # # checking and creating temp file
+  # if (nchar(tmp_fn) > 0 && !dir.exists(tmp_fn)) {dir.create(tmp_fn)}
+  
+  # terra::terraOptions(tempdir = tmp_fn, memfrac = 0.6)
   if (verbose) message("Running costDist (maxiter=", maxiter, ")...")
   mem_before <- gc(reset = TRUE)
   timing <- system.time({
@@ -167,6 +211,11 @@ run_cost_dist <- function(cost_with_tracks, target_value = 0, maxiter = 50,
     raster_dims = dims,
     n_cells = terra::ncell(cost_with_tracks)
   )
+  # # Cleanup temp if created
+  # if (nchar(tmp_fn) > 0 && file.exists(tmp_fn) && tmp_fn != filename) {
+  #   if (verbose) message("Cleaning up temp files: ", tmp_fn)
+  #   file.remove(tmp_fn)
+  # }
 
   list(surface = cost_surface, benchmark = benchmark)
 }
@@ -254,16 +303,24 @@ calc_cost_to_tracks <- function(
   target_value = 0,
   maxiter = 50,
   filename = "",
-  verbose = TRUE
+  verbose = TRUE,
+  temp_filename = ""
 ) {
   # 1. Load inputs
   cost_raster <- load_cost_raster(cost_raster, verbose = verbose)
   tracks <- load_tracks(tracks, verbose = verbose)
 
   # 2. Burn tracks into cost surface
+  # If we have a final filename, we can use a related temp name for the intermediate
+  if (nchar(filename) > 0 && nchar(temp_filename) == 0) {
+    temp_filename <- paste0(tools::file_path_sans_ext(filename), "_intermediate.tif")
+  }
+
   cost_with_tracks <- burn_tracks(
     cost_raster, tracks,
-    target_value = target_value, verbose = verbose
+    target_value = target_value,
+    filename = temp_filename,
+    verbose = verbose
   )
 
   # 3. Run cost-distance
@@ -272,6 +329,12 @@ calc_cost_to_tracks <- function(
     target_value = target_value, maxiter = maxiter,
     filename = filename, verbose = verbose
   )
+
+  # Cleanup intermediate if created
+  if (nchar(temp_filename) > 0 && file.exists(temp_filename) && temp_filename != filename) {
+    if (verbose) message("Cleaning up intermediate file: ", temp_filename)
+    file.remove(temp_filename)
+  }
 
   # 4. Extract query point values
   point_costs <- NULL

@@ -16,20 +16,6 @@ library(tictoc)
 
 galah_config(email = "jordanmirandamay@gmail.com", atlas = "Australia")
 source(paste0(WKDir,"R/functions.R"))
-
-
-
-#library(parallel)
-#library(tidyterra)
-#library(ggnewscale)
-#library(RColorBrewer)
-#library(beepr)
-#library(gdistance)
-#library(geosphere)
-#library(sf)
-#library(ggplot2)
-#library(lwgeom)
-#library(RColorBrewer)
 ```
 
 ```{r}
@@ -41,6 +27,7 @@ np_wol <- st_union(np_wol_bound) #tuning into one sf
 np_wol <- st_transform(np_wol, 4326)
 np_wol_buff <- st_buffer(np_wol, dist = 2000, nQuadSegs = 30) # changed from 500 to 2000
 np_wol_buff <- st_sfc(st_polygon(list(np_wol_buff[[1]][[1]])), crs = st_crs(np_wol_buff))
+plot(np_wol_buff)
 ```
 
 ```{r}
@@ -66,7 +53,7 @@ wol_tr <- wol_tr %>%
     highway %in% c("track") ~ "track",
     highway %in% c("footway", "steps", "path") ~ "path",))
 
-#saveRDS(wol_tr, paste0(WKDir,"data/tracks.rds"))
+plot(wol_tr$geometry)
 ```
 
 ```{r}
@@ -78,10 +65,11 @@ occ_wol_inat_all <- galah_call() |>
     dataResourceName == "iNaturalist Australia",
     imageIDsCount >=1
   ) |>
-  galah_select(institutionID, informationWithheld, raw_informationWithheld, group = "basic") |>
+  galah_select(institutionID, informationWithheld, raw_informationWithheld,occurrenceID,coordinateUncertaintyInMeters, group = "basic") |>
   atlas_occurrences()
 
 occ_wol_inat <- occ_wol_inat_all %>% filter(is.na(raw_informationWithheld))
+
 ```
 
 ```{r}
@@ -124,14 +112,15 @@ rm(ras_1, merged_2, stiched, slope_wol_save)
 
 
 ```{r}
-slope_wol <- terra::rast(paste0(WKDir, "data/DEM/slope.tif")) # slope from Elvis DEM tiles
+slope_wol <- terra::rast(paste0(WKDir, "data/DEM/slope_wol.tif")) # slope from Elvis DEM tiles
 # Transfering data to DEM CRS = 4283
 np_wol_gda94 <- st_transform(np_wol, crs = crs(slope_wol)) # Outline
 np_wol_buff_gda94 <- st_transform(np_wol_buff, crs = crs(slope_wol)) # Buffer
 wol_tr_gda94 <- st_transform(wol_tr, crs = crs(slope_wol)) # Tracks
 occ_wol_gda94 <- st_transform(occ_wol, crs = crs(slope_wol)) # iNaturalist occurrences
 
-# saveRDS(wol_tr_gda94,(paste0(WKDir, "data/processing/wol/tracks_wol.rds")))
+saveRDS(wol_tr_gda94, paste0(WKDir,"data/tracks/tracks_clean.rds"))
+
 ```
 
 

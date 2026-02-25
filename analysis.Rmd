@@ -8,60 +8,41 @@ date: "2026-02-16"
 WKDir ="/Users/z5161362/OneDrive - DPIE/Documents/PhD/spatRast/"
 
 source(paste0(WKDir,"R/cost_distance.r"))
+
+library(APCalign)
+
+library(ggplot2)
+library(tidyterra)
+library(ggnewscale)
+library(ggrepel)
 ```
 
 ```{r}
-
 #“Distances are multiplied with the friction, thus to get the cost-distance, the friction surface must express the cost per unit distance (speed) of travel”
-
 
 # Workflow
 # calc_cost_to_tracks this one does eveything?
 
-cost <- load_cost_raster(paste0(WKDir,"data/processing/wol/cost.tif"))
-track <- load_tracks(paste0(WKDir,"data/processing/wol/tracks.rds"))
-burn_tracks(cost, track, filename=paste0(WKDir,"output/burn.tif"))
-burn <- terra::rast(paste0(WKDir,"output/burn.tif"))
-# min value   : 0.000000 
-# max value   : 2.300762 
+setup_terra_for_large_rasters(
+  tempdir = paste0(WKDir, "output/temp/"),
+  memfrac = 0.6,
+  verbose = TRUE
+)
 
-run_cost_dist(burn, filename= (paste0(WKDir,"output/cost_surface.tif")), overwrite = TRUE)
+ cost <- load_cost_raster(paste0(WKDir,"data/processing/wol/cost.tif"))
+ track <- load_tracks(paste0(WKDir,"data/tracks/tracks_clean.rds"))
+ burn_tracks(cost, track, filename=paste0(WKDir,"output/burn.tif"))
+ burn <- terra::rast(paste0(WKDir,"output/burn.tif"))
 
-
-plot(burn)
+run_cost_dist(burn, filename= (paste0(WKDir,"output/cost_surface.tif")), tmp_fn= (paste0(WKDir,"output/temp/")), overwrite = TRUE, maxiter = 25)
 
 cost_surface <- terra::rast(paste0(WKDir,"output/cost_surface.tif"))
-#plot_cost_with_tracks(cost_surface, tracks = track, filename = "output/plots/cost_rast.png")
-#plot(cost_surface)
 
-# Running costDist (maxiter=50)...
-# Warning: [costDist] distance algorithm did not converge
-# costDist completed in 22292.55 seconds
-# Estimated peak memory: 168 MB
-# $surface
-# class       : SpatRaster 
-# size        : 63475, 44573, 1  (nrow, ncol, nlyr)
-# resolution  : 2, 2  (x, y)
-# extent      : 225278, 314424, 6288112, 6415062  (xmin, xmax, ymin, ymax)
-# coord. ref. : GDA94 / MGA zone 56 (EPSG:28356) 
-# source      : cost_surface.tif 
-# varname     : burn 
-# name        :    layer 
-# min value   :    0.000 
-# max value   : 4516.728 
-# 
-# $benchmark
-# $benchmark$elapsed_secs
-# [1] 22292.55
-# 
-# $benchmark$peak_mem_mb
-# [1] 167.9746
-# 
-# $benchmark$raster_dims
-# [1] 63475 44573
-# 
-# $benchmark$n_cells
-# [1] 2829271175
+# 142
+#75 files
+
+
+cost_surface_wol <-  terra::crop(cost_surface, vect(np_wol_gda94), mask=TRUE) # run and check
 ```
 
 ```{r}
@@ -75,30 +56,138 @@ occ_wol_gda94$pts_cost<-round(occ_wol_gda94$pts_cost,1)
 
 
 ```{r}
-png(paste0(WKDir,"output/plots/cost_rast.png"), width = 12000,height = 8800, res = 300)
-#pdf(paste0(WKDir,"output/plots/cost_rast.pdf"), width = 50,height = 50)
-image(cost_surface,
-    main = "Cost Surface with Tracks",
-    col = grDevices::hcl.colors(50, "YlOrRd", rev = TRUE), colNA = "black",
-    maxcell=100000000,
-    legend = TRUE
-  )
-plot(track, col = "dodgerblue", add = TRUE, legend = FALSE)
+occ_wol_gda94 <- occ_wol_gda94 %>% filter(uncertainty < 300) # filtering out points with more than 300m of uncertainty in location
 
-points(pts$x, pts$y,
-      pch = 21, bg = "cyan", cex = 1.2, lwd = 1.5)
-text(pts$x, pts$y,
-        labels = occ_wol_gda94$pts_cost,
-        pos = 4, cex = 0.5, font = 2, offset = 0.3)
-dev.off()
+#tax_resources <- load_taxonomic_resources() # load this first run of session
+status <- native_anywhere_in_australia(as.list(occ_wol_gda94$species), resources = tax_resources) # using APCalign to extract native/introduced status
+occ_wol_gda94 <- cbind(occ_wol_gda94, status$native_anywhere_in_aus)
 
-hist(occ_wol_gda94$pts_cost)
+
+introduced <- occ_wol_gda94 %>% filter(status.native_anywhere_in_aus == "introduced")
 ```
 
 
 
+
+
+
 ```{r}
-# SMALL
+occ_wol_gda94 <- occ_wol_gda94 %>% filter(uncertainty < 300) # filtering out points with more than 300m of uncertainty in location
+occ_wol_gda94_text <- occ_wol_gda94 %>% filter(pts_cost > 300) # creating a subset of lables for plotting
+
+buff <- st_buffer(np_wol_gda94, dist = 500, nQuadSegs = 30) # 500m buffer for plotting
+tr <- st_intersection(wol_tr_gda94, buff) 
+
+occ_wol_gda94 <- dist_points_to_path(occ_wol_gda94, tr) # Calculates crow distance from point to the path.
+```
+
+
+```{r}
+cost_plot <- ggplot() +
+  # cost surface 
+      geom_spatraster(data = cost_surface_wol, maxcell=100000000) +
+        scale_fill_gradientn(colours=grDevices::hcl.colors(50, "YlOrRd", rev = TRUE), na.value = "grey90") +
+          new_scale_colour() +
+  # Tracks
+      geom_sf(data = tr, aes(geometry=geometry, color = highway_com), key_glyph = draw_key_path, lwd=0.6) +
+          scale_color_manual(values=c("#7a7a7a","#4E4E4E","#E69F00","black")) +
+              new_scale_fill() +
+  # iNat points
+      geom_sf(data = occ_wol_gda94, aes(fill = as.factor(status.native_anywhere_in_aus)), shape = 21, colour = "black", size = 3, stroke = 1, inherit.aes = FALSE) +
+          scale_fill_manual(values=c("#ABC7C9", "#666633", "#669900"), name = "Native Status") +
+   # labels
+      geom_text_repel(data = occ_wol_gda94_text, aes(label = pts_cost, geometry = geometry), stat = "sf_coordinates", size = 3, fontface = "bold",max.overlaps = Inf) +
+  # plot design
+      coord_sf() +
+      theme_bw() + theme(legend.key = element_rect(fill="grey90")) +
+  scale_x_continuous( expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+         labs(title = "Cost Surface with Tracks")
+  
+ggsave(
+  filename = paste0(WKDir,"output/plots/cost_rast_wol.png"),
+  width = 40,
+  height = 30,
+  dpi = 300
+)
+
+#geom_sf(data = mask, fill = "white", colour = NA, inherit.aes = FALSE) +
+```
+
+
+```{r}
+# Grid points of n
+n <- 2000 
+grid <- st_sample(st_as_sf(np_wol_gda94), size = n, type = "regular")
+grid_sf <- st_sf(geometry = grid)
+grid_sf <- dist_points_to_path(grid_sf, tr) # Calculates crow distance from point to the path.
+
+pts_grid <- do.call(rbind, st_geometry(grid_sf$geometry)) %>% 
+    as_tibble() %>% setNames(c("x","y"))
+pts_grid_cost <- extract_point_costs(cost_surface, pts_grid)
+grid_sf <- cbind(grid_sf, pts_grid_cost)
+grid_sf$pts_cost<-round(grid_sf$pts_grid_cost,1)
+
+```
+
+
+```{r}
+ggplot() +
+  geom_point(grid_sf, mapping=aes(x=near_dist, y=pts_cost), colour="grey90") +
+  geom_point(occ_wol_gda94, mapping=aes(x=near_dist, y=pts_cost, fill=status.native_anywhere_in_aus), shape=21, colour="black", size=2) +
+  scale_fill_manual(values=c("#ABC7C9", "#666633", "#669900"),name = "Native Status") +
+  new_scale_fill() +
+  geom_point(introduced, mapping=aes(x=near_dist, y=pts_cost), shape=21, fill="#ABC7C9", colour="black", size=2) +
+  theme_bw() + theme(legend.key = element_rect(fill="grey90")) +
+labs(title = "", x= "Distance (km)", y="Cost")
+
+ggsave(
+  filename = paste0(WKDir,"output/plots/cost_v_dist.png"),
+  width = 10,
+  height = 8,
+  dpi = 300
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+# SMALL test 
 
 # Creating small box
 bbox <- ext(150.230, 150.280, -33.190, -33.140)
@@ -111,7 +200,7 @@ plot(cost_crop_sm)
 
 cost_sm <- load_cost_raster(cost_crop_sm)
 track_sm <- load_tracks(wol_tr_crop_sm)
-burn_sm <- burn_tracks(cost_sm, track_sm)
+burn_sm <- burn_tracks(cost_sm, track_sm, tmp_fn= (paste0(WKDir,"output/temp/")))
 cost_surface_sm<- run_cost_dist(burn_sm, filename= (paste0(WKDir,"output/cost_surface_sm.tif")), overwrite=TRUE)
 cost_surface_sm <- terra::rast(paste0(WKDir,"output/cost_surface_sm.tif"))
 plot_cost_with_tracks(cost_surface_sm, tracks = track_sm, filename = "output/plots/cost_rast_sm.png")
@@ -129,93 +218,30 @@ ext(cost_crop_sm)
 ```
 
 
-```{r}
-# MEDIUM
-
-# Creating medium box
-bbox <- ext(150.205, 150.305, -33.215, -33.115)
-bbox_vect <- as.polygons(bbox)
-crs(bbox_vect) <- "EPSG:4283"  
-bbox_proj <- project(bbox_vect, crs(cost))
-cost_crop_mm <- crop(cost, bbox_proj, mask = TRUE) # Cost
-wol_tr_crop_mm <- st_crop(wol_tr_gda94, bbox_proj, mask = TRUE) # Tracks
-plot(cost_crop_mm)
-
-cost_mm <- load_cost_raster(cost_crop_mm)
-track_mm <- load_tracks(wol_tr_crop_mm)
-burn_mm <- burn_tracks(cost_mm, track_mm)
-cost_surface_mm<- run_cost_dist(burn_mm, filename= (paste0(WKDir,"output/cost_surface_mm.tif")), overwrite=TRUE)
-cost_surface_mm <- terra::rast(paste0(WKDir,"output/cost_surface_mm.tif"))
-plot_cost_with_tracks(cost_surface_mm, tracks = track_mm, filename = "output/plots/cost_rast_mm.png")
-
-
-# Raster CRS: GDA94 / MGA zone 56 (EPSG:28356)
-# Tracks CRS: GDA94 / MGA zone 56 (EPSG:28356)
-# Raster dimensions: 5668 rows x 4810 cols (27,263,080 cells)
-# Resolution: 2 x 2 m
-# Rasterizing tracks onto cost surface...
-# Track cells rasterized: 25,634 (0.09% of raster)
-# Running costDist (maxiter=50)...
-# costDist completed in 40.89 seconds
-# Estimated peak memory: 143.8 MB
-```
 
 ```{r}
-# LARGE
+occ_wol_gda94 <- occ_wol_gda94 %>% filter(uncertainty < 300)
+occ_wol_gda94_text <- occ_wol_gda94 %>% filter(pts_cost > 300)
 
-# Creating large box
-bbox <- ext(150.155, 150.355, -33.265, -33.065)
-bbox_vect <- as.polygons(bbox)
-crs(bbox_vect) <- "EPSG:4283"  
-bbox_proj <- project(bbox_vect, crs(cost))
-cost_crop_lg <- crop(cost, bbox_proj, mask = TRUE) # Cost
-wol_tr_crop_lg <- st_crop(wol_tr_gda94, bbox_proj, mask = TRUE) # Tracks
-plot(cost_crop_lg)
+fac <- c("red", "blue", "green")[factor(occ_wol_gda94$status.native_anywhere_in_aus)]
 
-cost_lg <- load_cost_raster(cost_crop_lg)
-track_lg <- load_tracks(wol_tr_crop_lg)
-burn_lg <- burn_tracks(cost_lg, track_lg)
-cost_surface_lg<- run_cost_dist(burn_lg, filename= (paste0(WKDir,"output/cost_surface_lg.tif")), overwrite=TRUE)
-cost_surface_lg <- terra::rast(paste0(WKDir,"output/cost_surface_lg.tif"))
-plot_cost_with_tracks(cost_surface_lg, tracks = track_lg, filename = "output/plots/cost_rast_lg.png")
-
-# Raster CRS: GDA94 / MGA zone 56 (EPSG:28356)
-# Tracks CRS: GDA94 / MGA zone 56 (EPSG:28356)
-# Raster dimensions: 11336 rows x 9620 cols (109,052,320 cells)
-# Resolution: 2 x 2 m
-# Rasterizing tracks onto cost surface...
-# Track cells rasterized: 63,079 (0.06% of raster)
-# Running costDist (maxiter=50)...
-# costDist completed in 208.72 seconds
-# Estimated peak memory: 192.1 MB
-```
-
-```{r}
-# LARGE
-
-# Creating large box
-bbox <- ext(150.155, 150.355, -33.265, -33.065)
-bbox_vect <- as.polygons(bbox)
-crs(bbox_vect) <- "EPSG:4283"  
-bbox_proj <- project(bbox_vect, crs(cost))
-cost_crop_lg <- crop(cost, bbox_proj, mask = TRUE) # Cost
-wol_tr_crop_lg <- st_crop(wol_tr_gda94, bbox_proj, mask = TRUE) # Tracks
-plot(cost_crop_lg)
-
-cost_lg <- load_cost_raster(cost_crop_lg)
-track_lg <- load_tracks(wol_tr_crop_lg)
-burn_lg <- burn_tracks(cost_lg, track_lg)
-cost_surface_lg<- run_cost_dist(burn_lg, filename= (paste0(WKDir,"output/cost_surface_lg.tif")), overwrite=TRUE)
-cost_surface_lg <- terra::rast(paste0(WKDir,"output/cost_surface_lg.tif"))
-plot_cost_with_tracks(cost_surface_lg, tracks = track_lg, filename = "output/plots/cost_rast_lg.png")
-
-# Raster CRS: GDA94 / MGA zone 56 (EPSG:28356)
-# Tracks CRS: GDA94 / MGA zone 56 (EPSG:28356)
-# Raster dimensions: 11336 rows x 9620 cols (109,052,320 cells)
-# Resolution: 2 x 2 m
-# Rasterizing tracks onto cost surface...
-# Track cells rasterized: 63,079 (0.06% of raster)
-# Running costDist (maxiter=50)...
-# costDist completed in 208.72 seconds
-# Estimated peak memory: 192.1 MB
+png(paste0(WKDir,"output/plots/cost_rast_wol.png"), width = 12000,height = 8800, res = 300, bg = "white")
+#pdf(paste0(WKDir,"output/plots/cost_rast.pdf"), width = 50,height = 50)
+plot(cost_surface_wol,
+    main = "Cost Surface with Tracks", colNA = "black",
+    col = grDevices::hcl.colors(50, "YlOrRd", rev = TRUE),
+    maxcell=10000, #100000000,
+    legend = TRUE
+  )
+plot(track, col = "dodgerblue", add = TRUE, legend = FALSE)
+plot(mask,
+     col = "white",
+     border = NA,
+     add = TRUE)
+points(occ_wol_gda94$geometry,
+      pch = 21, bg = fac, cex = 1.2, lwd = 1.5, col=fac, legend = TRUE)
+text(occ_wol_gda94_text$geometry,
+        labels = occ_wol_gda94_text$pts_cost,
+        pos = 4, cex = 0.5, font = 2, offset = 0.3)
+dev.off()
 ```

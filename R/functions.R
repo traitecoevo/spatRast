@@ -19,8 +19,8 @@ dist_points_to_path <- function(points, paths){
 
 #turning occurrences records into shape file for compatibility
 galah_record_to_sf <-function(records){
-occ_ll <- records %>% dplyr::select(decimalLatitude,decimalLongitude, scientificName, eventDate)
-colnames(occ_ll) <- c("lat", "long","species", "date")
+occ_ll <- records %>% dplyr::select(decimalLatitude,decimalLongitude, scientificName, eventDate, occurrenceID,coordinateUncertaintyInMeters)
+colnames(occ_ll) <- c("lat", "long","species", "date", "ID", "uncertainty")
 occ_ll <- na.omit(occ_ll)
 occ_sp <- st_as_sf(occ_ll, coords= c("long", "lat"), crs= 4326) #dont forget long then lat. otherwise its the wrong way around
 }
