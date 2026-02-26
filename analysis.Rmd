@@ -15,6 +15,7 @@ library(ggplot2)
 library(tidyterra)
 library(ggnewscale)
 library(ggrepel)
+library(patchwork)
 ```
 
 ```{r}
@@ -132,19 +133,80 @@ grid_sf$pts_cost<-round(grid_sf$pts_grid_cost,1)
 
 
 ```{r}
-ggplot() +
-  geom_point(grid_sf, mapping=aes(x=near_dist, y=pts_cost), colour="grey90") +
-  geom_point(occ_wol_gda94, mapping=aes(x=near_dist, y=pts_cost, fill=status.native_anywhere_in_aus), shape=21, colour="black", size=2) +
+library(cowplot)
+```
+
+
+```{r}
+cost_v_dist <- 
+  ggplot() +
+  geom_point(data=grid_sf, mapping=aes(x=near_dist, y=pts_cost), colour="grey90") +
+  geom_point(data=occ_wol_gda94, mapping=aes(x=near_dist, y=pts_cost, fill=status.native_anywhere_in_aus), shape=21, colour="black", size=2) +
   scale_fill_manual(values=c("#ABC7C9", "#666633", "#669900"),name = "Native Status") +
   new_scale_fill() +
-  geom_point(introduced, mapping=aes(x=near_dist, y=pts_cost), shape=21, fill="#ABC7C9", colour="black", size=2) +
-  theme_bw() + theme(legend.key = element_rect(fill="grey90")) +
-labs(title = "", x= "Distance (km)", y="Cost")
+  geom_point(data=introduced, mapping=aes(x=near_dist, y=pts_cost), shape=21, fill="#ABC7C9", colour="black", size=2) +
+  theme_bw() + 
+  theme(legend.position = c(0.98, 0.02),
+    legend.justification = c(1, 0),
+    legend.background = element_rect(fill = "white", colour = "grey80"),
+    legend.key = element_rect(fill = "white"),
+    plot.margin = margin(0, 0, 0, 0,  unit = "pt"),
+    ) +
+labs(title = NULL, x= "Distance (km)", y="Cost") +
+    scale_x_continuous(expand = c(0.01,0.01)) +
+   scale_y_continuous(expand = c(0.01,0.01))
+
+dens1 <- 
+  ggplot() + 
+  geom_histogram(data=grid_sf, mapping=aes(x=near_dist), , bins = 100, position = "identity",fill="grey90", colour="grey90") +
+  geom_histogram(data=occ_wol_gda94, mapping= aes(x = near_dist, fill = status.native_anywhere_in_aus), bins = 100, position = "identity",) + 
+    scale_fill_manual(values=c("#ABC7C9", "#666633", "#669900"),name = "Native Status") +
+ geom_histogram(data=introduced, mapping= aes(x = near_dist), bins = 100, position = "identity",fill="#ABC7C9") +    
+    theme_bw() +
+      theme(axis.line = element_blank(), 
+  axis.text.x = element_blank(),
+  axis.ticks = element_blank(), 
+  axis.title.x = element_blank(),
+  legend.position = "none", 
+  panel.border = element_blank(), 
+  panel.grid.minor = element_blank(),
+  panel.grid.major = element_blank(),
+  plot.margin = margin(0,0,0,0)
+  )+
+    scale_x_continuous(expand = c(0.01,0.01)) +
+   scale_y_continuous(expand = c(0.01,0.01)) +
+  labs( y="Count") 
+   
+
+dens2 <- 
+  ggplot() + 
+  geom_histogram(data=grid_sf, mapping=aes(x=pts_cost), bins = 100, position = "identity", fill="grey90", colour="grey90") +
+  geom_histogram(data=occ_wol_gda94, mapping= aes(x = pts_cost, fill = status.native_anywhere_in_aus),bins = 100, position = "identity",) + 
+  scale_fill_manual(values=c("#ABC7C9", "#666633", "#669900"),name = "Native Status") +
+   geom_histogram(data=introduced, mapping= aes(x = pts_cost), bins = 100, position = "identity", fill="#ABC7C9") +
+  theme_bw() + 
+    theme(axis.line = element_blank(), 
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank(), 
+  axis.title.y = element_blank(),
+  legend.position = "none", 
+  panel.border = element_blank(), 
+  panel.grid.minor = element_blank(),
+  panel.grid.major = element_blank(),
+  plot.margin = margin(0,0,0,0)
+  )+
+    scale_x_continuous(expand = c(0.01,0.01)) +
+   scale_y_continuous(expand = c(0.01,0.01)) +
+  labs( y="Count")+
+  coord_flip()
+
+dens1 + plot_spacer() + cost_v_dist + dens2 + 
+ plot_layout(ncol = 2, nrow = 2, widths = c(8, 2), heights = c(2, 8))# & theme(plot.margin = margin(0,0,0,0))
 
 ggsave(
   filename = paste0(WKDir,"output/plots/cost_v_dist.png"),
-  width = 10,
-  height = 8,
+  width = 7,
+  height = 7,
   dpi = 300
 )
 ```
@@ -152,10 +214,81 @@ ggsave(
 
 
 
+```{r}
+tr_buff <- st_buffer(wol_tr_gda94, dist=30, nQuadSegs = 30)
+crop_to_track <-terra::crop(cost, tr_buff, mask=TRUE, touches=TRUE)
 
 
+tr_road <- tr_buff %>% filter(highway_com=="road")
+
+setup_terra_for_large_rasters(
+  tempdir = paste0(WKDir, "output/temp/"),
+  memfrac = 0.6,
+  verbose = TRUE
+)
+
+burn_tracks(crop_to_track, tr_road, filename=paste0(WKDir,"output/burn_tracks.tif"))
+burn_tr <- terra::rast(paste0(WKDir,"output/burn_tracks.tif"))
+# see if this runs without detaching tracks with no oragine
+run_cost_dist(burn_tr, filename= (paste0(WKDir,"output/cost_track.tif")), tmp_fn= (paste0(WKDir,"output/temp/")), overwrite = TRUE, maxiter = 25)
+cost_tr <- terra::rast(paste0(WKDir,"output/cost_track.tif"))
+
+#plot cost track over original tracks so we can see if things are missing
+```
 
 
+```{r}
+track_plot <- ggplot() +
+  geom_sf(data = np_wol_gda94, aes(geometry=geometry), colour="grey30", fill= "black", lwd=1) +
+  new_scale_fill() +
+    # Tracks
+      geom_sf(data = wol_tr_gda94, aes(geometry=geometry, color = highway_com), key_glyph = draw_key_path, lwd=0.6) +
+          scale_color_manual(values=c("#7a7a7a","#4E4E4E","#E69F00","white")) +
+              new_scale_fill() +
+      geom_spatraster(data = cost_tr, maxcell=100000000) +
+   scale_fill_gradientn(colours=grDevices::hcl.colors(50, "BluYl", rev = TRUE), na.value="transparent") +
+      coord_sf() +
+      theme_bw() + theme(panel.background = element_rect(fill = 'gray20', colour = 'grey20'), panel.grid.major = element_line(colour = "grey30")) +
+  scale_x_continuous( expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+         labs(title = " Tracks")
+ggsave(
+  filename = paste0(WKDir,"output/plots/tracks_cost.png"),
+  width = 40,
+  height = 30,
+  dpi = 300,
+  plot=track_plot
+)
+```
+
+
+```{r}
+# class       : SpatRaster 
+# size        : 64357, 44999, 1  (nrow, ncol, nlyr)
+# resolution  : 2, 2  (x, y)
+# extent      : 225016, 315014, 6287428, 6416142  (xmin, xmax, ymin, ymax)
+# coord. ref. : GDA94 / MGA zone 56 (EPSG:28356) 
+# source      : cost_track.tif 
+# varname     : burn_tracks 
+# name        :    layer 
+# min value   :     0.00 
+# max value   : 12007.47 
+# 
+# $benchmark
+# $benchmark$elapsed_secs
+# [1] 5195.66
+# 
+# $benchmark$peak_mem_mb
+# [1] 165.3319
+# 
+# $benchmark$raster_dims
+# [1] 64357 44999
+# 
+# $benchmark$n_cells
+# [1] 2896000643
+# 
+
+```
 
 
 

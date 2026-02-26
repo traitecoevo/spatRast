@@ -119,7 +119,7 @@ np_wol_buff_gda94 <- st_transform(np_wol_buff, crs = crs(slope_wol)) # Buffer
 wol_tr_gda94 <- st_transform(wol_tr, crs = crs(slope_wol)) # Tracks
 occ_wol_gda94 <- st_transform(occ_wol, crs = crs(slope_wol)) # iNaturalist occurrences
 
-saveRDS(wol_tr_gda94, paste0(WKDir,"data/tracks/tracks_clean.rds"))
+#saveRDS(wol_tr_gda94, paste0(WKDir,"data/tracks/tracks_clean.rds"))
 
 ```
 
@@ -136,5 +136,24 @@ cost <- app(slope_wol, f_exp,
 plot(cost)
 ```
 
+
+
+
+```{r}
+cost <- terra::rast(paste0(WKDir,"data/processing/wol/cost.tif"))
+
+tr_buff <- st_buffer(wol_tr_gda94, dist=20, nQuadSegs = 30)
+crop_to_track <-terra::crop(cost, tr_buff, mask=TRUE, touches=TRUE)
+
+
+tr_road <- tr_buff%>% filter(highway_com=="road")
+
+
+plot(tr_road$geometry)
+
+
+
+
+```
 
 
