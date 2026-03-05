@@ -6,7 +6,6 @@ date: "2026-02-16"
 
 ```{r}
 WKDir ="/Users/z5161362/OneDrive - DPIE/Documents/PhD/spatRast/"
-
 source(paste0(WKDir,"R/cost_distance.r"))
 
 library(APCalign)
@@ -24,23 +23,23 @@ library(patchwork)
 # Workflow
 
 setup_terra_for_large_rasters(
-  tempdir = paste0(WKDir, "output/temp/"),
+  tempdir = paste0(WKDir, "output_wol/temp/"),
   memfrac = 0.6,
   verbose = TRUE
 )
 
- cost <- load_cost_raster(paste0(WKDir,"data/processing/wol/cost.tif"))
- track <- load_tracks(paste0(WKDir,"data/tracks/tracks_clean.rds"))
- burn_tracks(cost, track, filename=paste0(WKDir,"output/burn.tif"))
- burn <- terra::rast(paste0(WKDir,"output/burn.tif"))
+ cost <- load_cost_raster(paste0(WKDir,"data_wol/processing/wol/cost.tif"))
+ track <- load_tracks(paste0(WKDir,"data_wol/tracks/tracks_clean.rds"))
+ burn_tracks(cost, track, filename=paste0(WKDir,"output_wol/burn.tif"))
+ burn <- terra::rast(paste0(WKDir,"output_wol/burn.tif"))
 
-run_cost_dist(burn, filename= (paste0(WKDir,"output/cost_surface.tif")), tmp_fn= (paste0(WKDir,"output/temp/")), overwrite = TRUE, maxiter = 25)
+run_cost_dist(burn, filename= (paste0(WKDir,"output_wol/cost_surface.tif")), tmp_fn= (paste0(WKDir,"output/temp/")), overwrite = TRUE, maxiter = 25)
 
 #cost_surface <- terra::rast(paste0(WKDir,"output/cost_surface.tif"))
 
 #cost_surface_wol <-  terra::crop(cost_surface, vect(np_wol_gda94), mask=TRUE) # run and check
 #terra::writeRaster(cost_surface_wol, paste0(WKDir, "output/cost_surface_wol.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
-cost_surface_wol <- terra::rast(paste0(WKDir, "output/cost_surface_wol.tif"))
+cost_surface_wol <- terra::rast(paste0(WKDir, "output_wol/cost_surface_wol.tif"))
 
 ```
 
@@ -71,7 +70,7 @@ tr_wol <- st_intersection(wol_tr_gda94, buff)
 
 occ_wol_cost <- dist_points_to_path(occ_wol_cost, tr_wol) # Calculates crow distance from point to the path.
 
-plot_cost(cost_surface=cost_surface_wol, tr=tr_wol, occ_cost=occ_wol_cost, occ_text=occ_wol_text, cell=100000000, fn=paste0(WKDir,"output/plots/cost_rast_wol.png"))
+plot_cost(cost_surface=cost_surface_wol, tr=tr_wol, occ_cost=occ_wol_cost, occ_text=occ_wol_text, cell=100000000, fn=paste0(WKDir,"output_wol/plots/cost_rast_wol.png"))
 ```
 
 
@@ -85,11 +84,11 @@ grid_sf <- grid_points_cost(n=2000, np_outline=np_wol_gda94, tr=tr_wol, cost_sur
 # iNaturalist
 introduced <- occ_wol_cost %>% filter(status.native_anywhere_in_aus == "introduced")
 occ_wol_cost_inat <- occ_wol_cost %>% filter(source == "iNaturalist")
-cost_v_dist_plot(grid_sf, occ_wol_cost_inat, extra=TRUE, top_layer_points = introduced, cols=c("#ABC7C9", "#666633", "#669900") , fn = paste0(WKDir,"output/plots/cost_v_dist_inat.png"))
+cost_v_dist_plot(grid_sf, occ_wol_cost_inat, extra=TRUE, top_layer_points = introduced, cols=c("#ABC7C9", "#666633", "#669900") , fn = paste0(WKDir,"output_wol/plots/cost_v_dist_inat.png"))
 
 # Herbarium
 occ_wol_cost_herb <- occ_wol_cost %>% filter(source == "Herbarium")
-cost_v_dist_plot(grid_sf, occ_wol_cost_herb, extra=FALSE, cols= c("#666633","#669900"), fn=paste0(WKDir,"output/plots/cost_v_dist_herb.png"))
+cost_v_dist_plot(grid_sf, occ_wol_cost_herb, extra=FALSE, cols= c("#666633","#669900"), fn=paste0(WKDir,"output_wol/plots/cost_v_dist_herb.png"))
 ```
 
 
@@ -101,7 +100,7 @@ cost_v_dist_plot(grid_sf, occ_wol_cost_herb, extra=FALSE, cols= c("#666633","#66
 
 
 ```{r}
-cost <- terra::rast(paste0(WKDir,"data/processing/wol/cost.tif"))
+cost <- terra::rast(paste0(WKDir,"data_wol/processing/wol/cost.tif"))
 tr_buff <- st_buffer(wol_tr_gda94, dist=30, nQuadSegs = 30)
 crop_to_track <-terra::crop(cost, tr_buff, mask=TRUE, touches=TRUE)
 
@@ -113,11 +112,11 @@ setup_terra_for_large_rasters(
   verbose = TRUE
 )
 
-burn_tracks(crop_to_track, tr_road, filename=paste0(WKDir,"output/burn_tracks.tif"))
-burn_tr <- terra::rast(paste0(WKDir,"output/burn_tracks.tif"))
+burn_tracks(crop_to_track, tr_road, filename=paste0(WKDir,"output_wol/burn_tracks.tif"))
+burn_tr <- terra::rast(paste0(WKDir,"output_wol/burn_tracks.tif"))
 
-run_cost_dist(burn_tr, filename= (paste0(WKDir,"output/cost_track.tif")), tmp_fn= ("/Users/z5161362/Downloads/temp/"), overwrite = TRUE, maxiter = 25)
-cost_tr <- terra::rast(paste0(WKDir,"output/cost_track.tif"))
+run_cost_dist(burn_tr, filename= (paste0(WKDir,"output_wol/cost_track.tif")), tmp_fn= ("/Users/z5161362/Downloads/temp/"), overwrite = TRUE, maxiter = 25)
+cost_tr <- terra::rast(paste0(WKDir,"output_wol/cost_track.tif"))
 plot(cost_tr)
 ```
 
@@ -141,10 +140,10 @@ plot(cost_crop_sm)
 
 cost_sm <- load_cost_raster(cost_crop_sm)
 track_sm <- load_tracks(wol_tr_crop_sm)
-burn_sm <- burn_tracks(cost_sm, track_sm, tmp_fn= (paste0(WKDir,"output/temp/")))
-cost_surface_sm<- run_cost_dist(burn_sm, filename= (paste0(WKDir,"output/cost_surface_sm.tif")), overwrite=TRUE)
-cost_surface_sm <- terra::rast(paste0(WKDir,"output/cost_surface_sm.tif"))
-plot_cost_with_tracks(cost_surface_sm, tracks = track_sm, filename = "output/plots/cost_rast_sm.png")
+burn_sm <- burn_tracks(cost_sm, track_sm, tmp_fn= (paste0(WKDir,"output_wol/temp/")))
+cost_surface_sm<- run_cost_dist(burn_sm, filename= (paste0(WKDir,"output_wol/cost_surface_sm.tif")), overwrite=TRUE)
+cost_surface_sm <- terra::rast(paste0(WKDir,"output_wol/cost_surface_sm.tif"))
+plot_cost_with_tracks(cost_surface_sm, tracks = track_sm, filename = "output_wol/plots/cost_rast_sm.png")
 
 # Raster CRS: GDA94 / MGA zone 56 (EPSG:28356)
 # Tracks CRS: GDA94 / MGA zone 56 (EPSG:28356)

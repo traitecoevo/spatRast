@@ -1,0 +1,154 @@
+---
+title: "setup"
+output: html_document
+date: "2026-02-16"
+---
+```{r}
+# set up files. 
+WKDir ="/Users/z5161362/OneDrive - DPIE/Documents/PhD/spatRast/"
+
+library(sf)
+library(dplyr)
+library(galah)
+library(terra)
+library(raster)
+library(tictoc)
+
+galah_config(email = "jordanmirandamay@gmail.com", atlas = "Australia")
+source(paste0(WKDir,"R/functions.R"))
+```
+
+```{r}
+# This is National parks official park boundaries
+np <- read_sf(dsn = paste0(WKDir,"data_wol/tenure_npws_estateinternalboundaries/NPWS_EstateInternalBoundaries.shp"))
+np_bmk <- subset(np, NAME %in% c("Blue Mountains National Park", "Kanangra-Boyd National Park")) #subset out Blue Mountains and Kanangra NP from other parks
+np_bmk_bound <- st_make_valid(np_bmk) #fixing broken shapes
+np_bmk <- st_union(np_bmk_bound) #tuning into one sf 
+np_bmk <- st_transform(np_bmk, 4326)
+np_bmk_buff <- st_buffer(np_bmk, dist = 2000, nQuadSegs = 30) # changed from 500 to 2000
+np_bmk_buff <- st_sfc(st_polygon(list(np_bmk_buff[[1]][[1]])), crs = st_crs(np_bmk_buff))
+plot(np_bmk_buff)
+```
+
+```{r}
+# This is a shape from qgis.This is used for downloading occurrence records.
+bmk_bound <- read_sf(dsn = paste0(WKDir,"data_bmk/bounds/bound_bmk_v1.shp")) 
+#plot(bmk_bound)
+```
+
+```{r}
+#This is tracks from open street maps
+bmk <- read_sf(dsn = paste0(WKDir,"data_bmk/tracks/tracks_bmk_v3.shp"))
+#plot(bmk$geometry)
+
+bmk_tr <- st_intersection(bmk,np_bmk_buff)
+
+bmk_tr <- bmk_tr[!bmk_tr$highway %in% c("proposed", "construction"), ]
+bmk_tr$highway_com <- bmk_tr$highway
+
+bmk_tr <- bmk_tr %>%
+  mutate(highway_com = case_when(
+    highway %in% c("trunk","primary","primary_link", "secondary", "secondary_link", "tertiary","tertiary_link","motorway", "motorway_link") ~ "road",
+    highway %in% c("residential", "unclassified", "service", "escape", "trunk_link","pedestrian", "living_street","cycleway", "busway","corridor","services") ~ "access track",
+    highway %in% c("track") ~ "track",
+    highway %in% c("footway", "steps", "path", "scramble") ~ "path")
+    )
+```
+
+```{r}
+# Getting occurrences records
+occ_bmk_inat_all <- galah_call() |>
+  galah_identify("Plantae") |>
+  geolocate(bmk_bound) |>
+  galah_filter(
+    dataResourceName == "iNaturalist Australia",
+    imageIDsCount >=1
+  ) |>
+  galah_select(institutionID, informationWithheld, raw_informationWithheld,occurrenceID,coordinateUncertaintyInMeters, group = "basic") |>
+  atlas_occurrences()
+
+occ_bmk_inat <- occ_bmk_inat_all %>% filter(is.na(raw_informationWithheld))
+
+#turning occurrences records into shape file for compatibility
+occ_bmk_sp <- galah_record_to_sf (occ_bmk_inat)
+#filtering to match national park shapefile
+occ_bmk <- st_filter(occ_bmk_sp, np_bmk)
+```
+
+```{r}
+# Getting occurrences records
+occ_bmk_herb_all <- galah_call() |>
+  galah_identify("Plantae") |>
+  geolocate(bmk_bound) |>
+  galah_filter(
+    basisOfRecord == "PRESERVED_SPECIMEN",
+    imageIDsCount >=1,
+    year >= 2010
+  ) |>
+  galah_select(institutionID, informationWithheld, raw_informationWithheld,occurrenceID,coordinateUncertaintyInMeters, verbatimLatitude, verbatimLongitude, group = "basic")  |>
+atlas_occurrences()
+
+occ_bmk_herb <- occ_bmk_herb_all %>% filter(!is.na(eventDate))
+
+#turning occurrences records into shape file for compatibility
+occ_bmk_herb_sp <- galah_record_to_sf (occ_bmk_herb)
+#filtering to match national park shapefile
+occ_bmk_herb <- st_filter(occ_bmk_herb_sp, np_bmk)
+```
+
+
+```{r}
+#This section just runs once. It takes the DEM and saves a slope rater than can be loaded in, in the next section.
+#only run once, takes a long time and is memory intensive.
+file = "D:/NSW Government - Spatial Services/DEM/2 Metre/"
+filename =list.files(path=file, pattern = ".tif", full.names = FALSE, recursive = FALSE)
+rasters_2 <- lapply(filename, function(fn) terra::rast(paste0(file, fn)))
+merged_2  <- do.call(mosaic, c(rasters_2, fun=mean))
+
+file = "D:/NSW Government - Spatial Services/DEM/1 Metre/"
+filename =list.files(path=file, pattern = ".tif", full.names = FALSE, recursive = FALSE)
+rasters_1 <- lapply(filename, function(fn) terra::rast(paste0( file, fn)))
+merged_1  <- do.call(mosaic, c(rasters_1, fun=mean))
+ras_1 <- terra::aggregate(merged_1, fact = 2, fun = mean)
+
+stiched <- terra::merge(ras_1, merged_2)
+terra::writeRaster(stiched, paste0(WKDir, "data_bmk/DEM/stiched.tif"), overwrite = TRUE)
+rm(ras_1, merged_2)
+
+np_bmk_buff_gda94 <- sf::st_transform(np_bmk_buff, crs = crs(stiched))
+stiched_bmk <- terra::crop(stiched, vect(np_bmk_buff_gda94), mask=TRUE)
+slope <- terra::terrain(stiched_bmk, v="slope", unit="degrees", neighbors=8)
+terra::writeRaster(slope, paste0(WKDir, "data/DEM/slope.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
+
+#slope <- terra::rast(paste0(WKDir, "data_bmk/DEM/slope.tif")) # slope from Elvis DEM tiles
+slope_bmk_save <- terra::crop(slope, vect(np_bmk_buff_gda94), mask=TRUE) # This line takes a while. Try and keep loaded
+terra::writeRaster(slope_bmk_save, paste0(WKDir, "data/DEM/slope_bmk.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
+rm(stiched, slope_bmk_save)
+```
+
+
+
+```{r}
+slope_bmk <- terra::rast(paste0(WKDir, "data_bmk/DEM/slope_bmk.tif")) # slope from Elvis DEM tiles
+# Transfering data to DEM CRS = 4283
+np_bmk_gda94 <- st_transform(np_bmk, crs = crs(slope_bmk)) # Outline
+np_bmk_buff_gda94 <- st_transform(np_bmk_buff, crs = crs(slope_bmk)) # Buffer
+bmk_tr_gda94 <- st_transform(bmk_tr, crs = crs(slope_bmk)) # Tracks
+occ_bmk_gda94 <- st_transform(occ_bmk, crs = crs(slope_bmk)) # iNaturalist occurrences
+occ_bmk_herb_gda94 <- st_transform(occ_bmk_herb, crs = crs(slope_bmk)) # herbarium occurrences
+#saveRDS(bmk_tr_gda94, paste0(WKDir,"data/tracks/tracks_clean.rds"))
+```
+
+
+```{r}
+# Transferring via Toblers Hiking function
+f_exp <- function(x) {
+  ifelse(x > 70, NA, 1/(6 * exp(-3.5 * abs(x/100 + 0.05))) )
+}
+
+cost <- app(slope_bmk, f_exp,
+             filename=paste0(WKDir,"data_bmk/processing/bmk/cost.tif"),
+             overwrite=TRUE)
+plot(cost)
+```
+

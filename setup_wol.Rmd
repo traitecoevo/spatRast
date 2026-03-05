@@ -20,7 +20,7 @@ source(paste0(WKDir,"R/functions.R"))
 
 ```{r}
 # This is National parks official park boundaries
-np <- read_sf(dsn = paste0(WKDir,"data/tenure_npws_estateinternalboundaries/NPWS_EstateInternalBoundaries.shp"))
+np <- read_sf(dsn = paste0(WKDir,"data_wol/tenure_npws_estateinternalboundaries/NPWS_EstateInternalBoundaries.shp"))
 np_wol <- subset(np, np$NAME =="Wollemi National Park") #subset out Wollemi np from outer parks
 np_wol_bound <- st_make_valid(np_wol) #fixing broken shapes
 np_wol <- st_union(np_wol_bound) #tuning into one sf 
@@ -32,13 +32,13 @@ plot(np_wol_buff)
 
 ```{r}
 # This is a shape from qgis.This is used for downloading occurrence records.
-wol_bound <- read_sf(dsn = paste0(WKDir,"data/bounds/wol_bound_v3.shp")) 
+wol_bound <- read_sf(dsn = paste0(WKDir,"data_wol/bounds/wol_bound_v3.shp")) 
 #plot(wol_bound)
 ```
 
 ```{r}
 #This is tracks from open street maps, filtered to Wollemi, surprisingly good!
-wol <- read_sf(dsn = paste0(WKDir,"data/tracks/tracks_wol_v2.shp"))
+wol <- read_sf(dsn = paste0(WKDir,"data_wol/tracks/tracks_wol_v2.shp"))
 #plot(wol$geometry)
 
 wol_tr <- st_intersection(wol,np_wol_buff) 
@@ -102,19 +102,19 @@ occ_wol_herb <- st_filter(occ_wol_herb_sp, np_wol)
 ```{r}
 #This section just runs once. It takes the DEM and saves a slope rater than can be loaded in, in the next section.
 #only run once, takes a long time and is memory intensive.
-file = "data/DEM/Elevation/2 Metre/"
+file = "data_wol/DEM/Elevation/2 Metre/"
 filename =list.files(path=paste0(WKDir,file), pattern = ".tif", full.names = FALSE, recursive = FALSE)
 rasters_2 <- lapply(filename, function(fn) terra::rast(paste0(WKDir, file, fn)))
 merged_2  <- do.call(mosaic, c(rasters_2, fun=mean))
 
-file = "data/DEM/Elevation/1 Metre/"
+file = "data_wol/DEM/Elevation/1 Metre/"
 filename =list.files(path=paste0(WKDir,file), pattern = ".tif", full.names = FALSE, recursive = FALSE)
 rasters_1 <- lapply(filename, function(fn) terra::rast(paste0(WKDir, file, fn)))
 merged_1  <- do.call(mosaic, c(rasters_1, fun=mean))
 ras_1 <- terra::aggregate(merged_1, fact = 2, fun = mean)
 
 stiched <- terra::merge(ras_1, merged_2)
-terra::writeRaster(stiched, paste0(WKDir, "data/DEM/stiched.tif"), overwrite = TRUE) #temp file until storage issues have been solved. 
+terra::writeRaster(stiched, paste0(WKDir, "data_wol/DEM/stiched.tif"), overwrite = TRUE) #temp file until storage issues have been solved. 
 rm(ras_1, merged_2, stiched,)
 
 np_wol_buff_gda94 <- sf::st_transform(np_wol_buff, crs = crs(stiched))
@@ -122,7 +122,7 @@ stiched_wol <- terra::crop(stiched, vect(np_wol_buff_gda94), mask=TRUE)
 slope <- terra::terrain(stiched_wol, v="slope", unit="degrees", neighbors=8)
 
 #terra::writeRaster(slope, paste0(WKDir, "data/DEM/slope.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
-slope <- terra::rast(paste0(WKDir, "data/DEM/slope.tif")) # slope from Elvis DEM tiles
+slope <- terra::rast(paste0(WKDir, "data_wol/DEM/slope.tif")) # slope from Elvis DEM tiles
 slope_wol_save <- terra::crop(slope, vect(np_wol_buff_gda94), mask=TRUE) # This line takes a while. Try and keep loaded
 #terra::writeRaster(slope_wol_save, paste0(WKDir, "data/DEM/slope_wol.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
 rm(ras_1, merged_2, stiched, slope_wol_save)
@@ -131,7 +131,7 @@ rm(ras_1, merged_2, stiched, slope_wol_save)
 
 
 ```{r}
-slope_wol <- terra::rast(paste0(WKDir, "data/DEM/slope_wol.tif")) # slope from Elvis DEM tiles
+slope_wol <- terra::rast(paste0(WKDir, "data_wol/DEM/slope_wol.tif")) # slope from Elvis DEM tiles
 # Transfering data to DEM CRS = 4283
 np_wol_gda94 <- st_transform(np_wol, crs = crs(slope_wol)) # Outline
 np_wol_buff_gda94 <- st_transform(np_wol_buff, crs = crs(slope_wol)) # Buffer
@@ -149,14 +149,8 @@ f_exp <- function(x) {
 }
 
 cost <- app(slope_wol, f_exp,
-             filename=paste0(WKDir,"data/processing/wol/cost.tif"),
+             filename=paste0(WKDir,"data_wol/processing/wol/cost.tif"),
              overwrite=TRUE)
 plot(cost)
-```
-
-
-```{r}
-np_bmk <- read_sf(dsn = "/Users/z5161362/OneDrive - DPIE/Documents/PhD/Remote_areas_analysis/bounds/bound_bmk_v1.shp")
-plot(np_bmk)
 ```
 
