@@ -70,13 +70,32 @@ occ_wol_inat_all <- galah_call() |>
 
 occ_wol_inat <- occ_wol_inat_all %>% filter(is.na(raw_informationWithheld))
 
-```
-
-```{r}
 #turning occurrences records into shape file for compatibility
 occ_wol_sp <- galah_record_to_sf (occ_wol_inat)
 #filtering to match national park shapefile
 occ_wol <- st_filter(occ_wol_sp, np_wol)
+```
+
+```{r}
+# Getting occurrences records
+occ_wol_herb_all <- galah_call() |>
+  galah_identify("Plantae") |>
+  geolocate(wol_bound) |>
+  galah_filter(
+    basisOfRecord == "PRESERVED_SPECIMEN",
+    imageIDsCount >=1,
+    year >= 2015
+  ) |>
+  galah_select(institutionID, informationWithheld, raw_informationWithheld,occurrenceID,coordinateUncertaintyInMeters, verbatimLatitude, verbatimLongitude, group = "basic")  |>
+atlas_occurrences()
+
+occ_wol_herb <- occ_wol_herb_all %>% filter(!is.na(eventDate))
+
+
+#turning occurrences records into shape file for compatibility
+occ_wol_herb_sp <- galah_record_to_sf (occ_wol_herb)
+#filtering to match national park shapefile
+occ_wol_herb <- st_filter(occ_wol_herb_sp, np_wol)
 ```
 
 
@@ -118,9 +137,8 @@ np_wol_gda94 <- st_transform(np_wol, crs = crs(slope_wol)) # Outline
 np_wol_buff_gda94 <- st_transform(np_wol_buff, crs = crs(slope_wol)) # Buffer
 wol_tr_gda94 <- st_transform(wol_tr, crs = crs(slope_wol)) # Tracks
 occ_wol_gda94 <- st_transform(occ_wol, crs = crs(slope_wol)) # iNaturalist occurrences
-
+occ_wol_herb_gda94 <- st_transform(occ_wol_herb, crs = crs(slope_wol)) # herbarium occurrences
 #saveRDS(wol_tr_gda94, paste0(WKDir,"data/tracks/tracks_clean.rds"))
-
 ```
 
 
@@ -137,23 +155,8 @@ plot(cost)
 ```
 
 
-
-
 ```{r}
-cost <- terra::rast(paste0(WKDir,"data/processing/wol/cost.tif"))
-
-tr_buff <- st_buffer(wol_tr_gda94, dist=20, nQuadSegs = 30)
-crop_to_track <-terra::crop(cost, tr_buff, mask=TRUE, touches=TRUE)
-
-
-tr_road <- tr_buff%>% filter(highway_com=="road")
-
-
-plot(tr_road$geometry)
-
-
-
-
+np_bmk <- read_sf(dsn = "/Users/z5161362/OneDrive - DPIE/Documents/PhD/Remote_areas_analysis/bounds/bound_bmk_v1.shp")
+plot(np_bmk)
 ```
-
 
