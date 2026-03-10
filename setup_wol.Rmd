@@ -84,7 +84,7 @@ occ_wol_herb_all <- galah_call() |>
   galah_filter(
     basisOfRecord == "PRESERVED_SPECIMEN",
     imageIDsCount >=1,
-    year >= 2015
+    year >= 2010
   ) |>
   galah_select(institutionID, informationWithheld, raw_informationWithheld,occurrenceID,coordinateUncertaintyInMeters, verbatimLatitude, verbatimLongitude, group = "basic")  |>
 atlas_occurrences()

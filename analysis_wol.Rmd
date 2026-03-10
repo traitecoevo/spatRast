@@ -40,7 +40,6 @@ run_cost_dist(burn, filename= (paste0(WKDir,"output_wol/cost_surface.tif")), tmp
 #cost_surface_wol <-  terra::crop(cost_surface, vect(np_wol_gda94), mask=TRUE) # run and check
 #terra::writeRaster(cost_surface_wol, paste0(WKDir, "output/cost_surface_wol.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
 cost_surface_wol <- terra::rast(paste0(WKDir, "output_wol/cost_surface_wol.tif"))
-
 ```
 
 ```{r}
@@ -90,12 +89,6 @@ cost_v_dist_plot(grid_sf, occ_wol_cost_inat, extra=TRUE, top_layer_points = intr
 occ_wol_cost_herb <- occ_wol_cost %>% filter(source == "Herbarium")
 cost_v_dist_plot(grid_sf, occ_wol_cost_herb, extra=FALSE, cols= c("#666633","#669900"), fn=paste0(WKDir,"output_wol/plots/cost_v_dist_herb.png"))
 ```
-
-
-
-
-
-
 
 
 

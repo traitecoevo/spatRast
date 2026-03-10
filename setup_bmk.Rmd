@@ -16,6 +16,16 @@ library(tictoc)
 
 galah_config(email = "jordanmirandamay@gmail.com", atlas = "Australia")
 source(paste0(WKDir,"R/functions.R"))
+
+source(paste0(WKDir,"R/cost_distance.r"))
+
+library(APCalign)
+
+library(ggplot2)
+library(tidyterra)
+library(ggnewscale)
+library(ggrepel)
+library(patchwork)
 ```
 
 ```{r}
@@ -102,8 +112,15 @@ occ_bmk_herb <- st_filter(occ_bmk_herb_sp, np_bmk)
 #only run once, takes a long time and is memory intensive.
 file = "D:/NSW Government - Spatial Services/DEM/2 Metre/"
 filename =list.files(path=file, pattern = ".tif", full.names = FALSE, recursive = FALSE)
+one <- terra::rast(paste0(file, filename[1]))
+set_crs <- crs(one)
+
+
 rasters_2 <- lapply(filename, function(fn) terra::rast(paste0(file, fn)))
 merged_2  <- do.call(mosaic, c(rasters_2, fun=mean))
+
+
+
 
 file = "D:/NSW Government - Spatial Services/DEM/1 Metre/"
 filename =list.files(path=file, pattern = ".tif", full.names = FALSE, recursive = FALSE)
@@ -113,30 +130,34 @@ ras_1 <- terra::aggregate(merged_1, fact = 2, fun = mean)
 
 stiched <- terra::merge(ras_1, merged_2)
 terra::writeRaster(stiched, paste0(WKDir, "data_bmk/DEM/stiched.tif"), overwrite = TRUE)
-rm(ras_1, merged_2)
+#rm(ras_1, merged_2)
 
 np_bmk_buff_gda94 <- sf::st_transform(np_bmk_buff, crs = crs(stiched))
 stiched_bmk <- terra::crop(stiched, vect(np_bmk_buff_gda94), mask=TRUE)
 slope <- terra::terrain(stiched_bmk, v="slope", unit="degrees", neighbors=8)
-terra::writeRaster(slope, paste0(WKDir, "data/DEM/slope.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
+#terra::writeRaster(slope, paste0(WKDir, "data_bmk/DEM/slope.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
 
-#slope <- terra::rast(paste0(WKDir, "data_bmk/DEM/slope.tif")) # slope from Elvis DEM tiles
+slope <- terra::rast(paste0(WKDir, "data_bmk/DEM/slope.tif")) # slope from Elvis DEM tiles
 slope_bmk_save <- terra::crop(slope, vect(np_bmk_buff_gda94), mask=TRUE) # This line takes a while. Try and keep loaded
-terra::writeRaster(slope_bmk_save, paste0(WKDir, "data/DEM/slope_bmk.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
-rm(stiched, slope_bmk_save)
+terra::writeRaster(slope_bmk_save, paste0(WKDir, "data_bmk/DEM/slope_bmk.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
+#rm(stiched, slope_bmk_save)
+
+
 ```
 
 
 
 ```{r}
 slope_bmk <- terra::rast(paste0(WKDir, "data_bmk/DEM/slope_bmk.tif")) # slope from Elvis DEM tiles
+
 # Transfering data to DEM CRS = 4283
-np_bmk_gda94 <- st_transform(np_bmk, crs = crs(slope_bmk)) # Outline
-np_bmk_buff_gda94 <- st_transform(np_bmk_buff, crs = crs(slope_bmk)) # Buffer
-bmk_tr_gda94 <- st_transform(bmk_tr, crs = crs(slope_bmk)) # Tracks
-occ_bmk_gda94 <- st_transform(occ_bmk, crs = crs(slope_bmk)) # iNaturalist occurrences
-occ_bmk_herb_gda94 <- st_transform(occ_bmk_herb, crs = crs(slope_bmk)) # herbarium occurrences
-#saveRDS(bmk_tr_gda94, paste0(WKDir,"data/tracks/tracks_clean.rds"))
+np_bmk_gda94 <- st_transform(np_bmk, crs = crs(set_crs)) # Outline
+np_bmk_buff_gda94 <- st_transform(np_bmk_buff, crs = crs(set_crs)) # Buffer
+bmk_tr_gda94 <- st_transform(bmk_tr, crs = crs(set_crs)) # Tracks
+occ_bmk_gda94 <- st_transform(occ_bmk, crs = crs(set_crs)) # iNaturalist occurrences
+occ_bmk_herb_gda94 <- st_transform(occ_bmk_herb, crs = crs(set_crs)) # herbarium occurrences
+saveRDS(bmk_tr_gda94, paste0(WKDir,"data_bmk/tracks/tracks_clean.rds"))
+#plot(slope_bmk)
 ```
 
 
@@ -146,9 +167,87 @@ f_exp <- function(x) {
   ifelse(x > 70, NA, 1/(6 * exp(-3.5 * abs(x/100 + 0.05))) )
 }
 
-cost <- app(slope_bmk, f_exp,
-             filename=paste0(WKDir,"data_bmk/processing/bmk/cost.tif"),
+cost_bmk <- app(slope_bmk, f_exp,
+             filename=paste0(WKDir,"data_bmk/cost.tif"),
              overwrite=TRUE)
-plot(cost)
+crs(cost_bmk)
+
+plot(cost_bmk)
 ```
+```{r}
+
+setup_terra_for_large_rasters(
+  tempdir = "D:/temp/",
+  memfrac = 0.6,
+  verbose = TRUE
+)
+
+ cost_bmk <- load_cost_raster(paste0(WKDir,"data_bmk/cost.tif"))
+ crs(cost_bmk) <- set_crs
+ track_bmk <- load_tracks(paste0(WKDir,"data_bmk/tracks/tracks_clean.rds"))
+ burn_tracks(cost_bmk, track_bmk, filename=paste0(WKDir,"output_bmk/burn.tif"))
+ burn_bmk <- terra::rast(paste0(WKDir,"output_bmk/burn.tif"))
+
+run_cost_dist(burn_bmk, filename= (paste0(WKDir,"output_bmk/cost_surface.tif")), tmp_fn="D:/temp/", overwrite = TRUE, maxiter = 25)
+
+cost_surface <- terra::rast(paste0(WKDir,"output_bmk/cost_surface.tif"))
+
+cost_surface_bmk <-  terra::crop(cost_surface, vect(np_bmk_gda94), mask=TRUE) # run and check
+terra::writeRaster(cost_surface_bmk, paste0(WKDir, "output_bmk/cost_surface.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
+cost_surface_bmk <- terra::rast(paste0(WKDir, "output_bmk/cost_surface.tif"))
+```
+```{r}
+# combining herb and iNat
+occ_bmk_comb <- rbind(occ_bmk_gda94, occ_bmk_herb_gda94)
+occ_bmk_comb <- dplyr::bind_rows(list(occ_bmk_gda94, occ_bmk_herb_gda94), .id = 'source') 
+occ_bmk_comb <- occ_bmk_comb %>%
+    mutate(source = recode(source, "1" = "iNaturalist", "2" = "Herbarium"))
+
+occ_bmk_cost <- pts_cost(occ_bmk_comb, cost_surface_bmk) # point cost
+```
+
+
+```{r}
+occ_bmk_cost <- occ_bmk_cost %>% filter(uncertainty < 300) # filtering out points with more than 300m of uncertainty in location
+tax_resources <- load_taxonomic_resources() # load this first run of session
+status <- native_anywhere_in_australia(as.list(occ_bmk_cost$species), resources = tax_resources) # using APCalign to extract native/introduced status
+occ_bmk_cost <- cbind(occ_bmk_cost, status$native_anywhere_in_aus)
+```
+
+
+```{r}
+occ_bmk_text <- occ_bmk_cost %>% filter(pts_cost > 300) # creating a subset of labels for plotting
+
+buff <- st_buffer(np_bmk_gda94, dist = 500, nQuadSegs = 30) # 500m buffer for plotting
+tr_bmk <- st_intersection(bmk_tr_gda94, buff) 
+
+occ_bmk_cost <- dist_points_to_path(occ_bmk_cost, tr_bmk) # Calculates crow distance from point to the path.
+
+plot_cost(cost_surface=cost_surface_bmk, tr=tr_bmk, occ_cost=occ_bmk_cost, occ_text=occ_bmk_text, cell=10000, fn=paste0(WKDir,"output_bmk/plots/cost_rast_bmk.png"))
+```
+
+
+
+
+
+
+
+
+```{r}
+grid_sf <- grid_points_cost(n=2000, np_outline=np_bmk_gda94, tr=tr_bmk, cost_surface=cost_surface_bmk)
+```
+
+
+```{r}
+#cost vers dist plots
+# iNaturalist
+introduced <- occ_bmk_cost %>% filter(status.native_anywhere_in_aus == "introduced")
+occ_bmk_cost_inat <- occ_bmk_cost %>% filter(source == "iNaturalist")
+cost_v_dist_plot(grid_sf, occ_bmk_cost_inat, extra=TRUE, top_layer_points = introduced, cols=c("#ABC7C9", "#666633", "#669900") , fn = paste0(WKDir,"output_bmk/plots/cost_v_dist_inat.png"))
+
+# Herbarium
+occ_bmk_cost_herb <- occ_bmk_cost %>% filter(source == "Herbarium")
+cost_v_dist_plot(grid_sf, occ_bmk_cost_herb, extra=FALSE, cols= c("#666633","#669900"), fn=paste0(WKDir,"output_bmk/plots/cost_v_dist_herb.png"))
+```
+
 
