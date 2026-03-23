@@ -107,8 +107,29 @@ filename =list.files(path=paste0(WKDir,file), pattern = ".tif", full.names = FAL
 rasters_2 <- lapply(filename, function(fn) terra::rast(paste0(WKDir, file, fn)))
 merged_2  <- do.call(mosaic, c(rasters_2, fun=mean))
 
+
+
 file = "data_wol/DEM/Elevation/1 Metre/"
 filename =list.files(path=paste0(WKDir,file), pattern = ".tif", full.names = FALSE, recursive = FALSE)
+
+        all_crs <- sapply(paste0(file,filename), function(f) crs(rast(f)))
+        unique_crs <- unique(all_crs)
+        merged_groups <- list()
+        for (i in seq_along(unique_crs)) {
+            target <- unique_crs[i]
+            group_files <- paste0(file, filename)[all_crs == target]
+            # Load tiles for group
+            group_rasters <- lapply(group_files, rast)
+            # Merge group
+            merged_groups[[i]] <- do.call(mosaic, c(group_rasters, fun = mean))
+        }
+         plot(merged_groups[[1]])
+         plot(merged_groups[[2]])
+        # crs(merged_groups[[1]])
+        # LHS <- terra::project(merged_groups[[1]], crs(merged_groups[[2]]))
+        # LHS <- resample(LHS, extend(merged_groups[[2]],LHS), method = "bilinear")
+        # merged_2 <- mosaic(LHS, merged_groups[[2]], fun = mean)
+
 rasters_1 <- lapply(filename, function(fn) terra::rast(paste0(WKDir, file, fn)))
 merged_1  <- do.call(mosaic, c(rasters_1, fun=mean))
 ras_1 <- terra::aggregate(merged_1, fact = 2, fun = mean)
@@ -145,7 +166,8 @@ occ_wol_herb_gda94 <- st_transform(occ_wol_herb, crs = crs(slope_wol)) # herbari
 ```{r}
 # Transferring via Toblers Hiking function
 f_exp <- function(x) {
-  ifelse(x > 70, NA, 1/(6 * exp(-3.5 * abs(x/100 + 0.05))) )
+  speed <- 0.6 * (6 * exp(-3.5 * abs(x / 100 + 0.05)))  # km/h (off-track adjusted)
+  ifelse(x > 70, NA, 1 / (speed * 1000))                # hours per metre
 }
 
 cost <- app(slope_wol, f_exp,

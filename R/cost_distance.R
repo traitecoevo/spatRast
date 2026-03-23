@@ -211,11 +211,6 @@ run_cost_dist <- function(cost_with_tracks, target_value = 0, maxiter = 25,
     raster_dims = dims,
     n_cells = terra::ncell(cost_with_tracks)
   )
-  # # Cleanup temp if created
-  # if (nchar(tmp_fn) > 0 && file.exists(tmp_fn) && tmp_fn != filename) {
-  #   if (verbose) message("Cleaning up temp files: ", tmp_fn)
-  #   file.remove(tmp_fn)
-  # }
 
   list(surface = cost_surface, benchmark = benchmark)
 }

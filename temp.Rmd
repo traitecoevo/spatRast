@@ -1,0 +1,128 @@
+---
+title: "temp"
+output: html_document
+date: "2026-03-10"
+---
+
+
+
+```{r}
+# '#5566AA', '#117733', '#44AA66', '#55AA22', '#668822', '#99BB55', '#558877', '#88BBAA', '#AADDCC', '#44AA88', '#DDCC66', '#FFDD44', '#FFEE88', '#BB0011' #scale_color_manual(values=c("#FFD700","black"),name = "Data Source") + # only include this when both herbarim and inat data are avalible.
+           # labels
+        #fontface = "bold",
+# values=c("#7a7a7a","#4E4E4E","#E69F00","grey10")        
+
+
+library(ozmaps)
+library(maps)
+```
+
+
+```{r}
+pal_color <- c("#003366","#BDC881","#46ACC8","#B40F20","#DD8D29")
+#map <- "#88BBAA","#5566AA"
+
+map_info <-list(name=c("New South Wales","ACT","Queensland","Victoria","Tasmania", "Sydney"), lat=c("-30.81937","-35.29879","-26.73785", "-36.64907", "-42.04160","-33.85054"), long=c("146.86407","149.09885", "146.53661", "144.52213","146.70751", " 151.76835"))
+map_df<-as.data.frame(map_info)
+map_sf <- st_as_sf(map_df, coords = c("long", "lat"), crs = 4326)
+
+
+
+
+info <-list(name=c("Blue Mountains and\nKanangra National Parks","Wollemi National Park"), lat=c("-33.74889","-32.96797"), long=c("148.37292", "148.37292"))
+info_df<-as.data.frame(info)
+info_sf <- st_as_sf(info_df, coords = c("long", "lat"), crs = 4326)
+```
+
+
+```{r}
+#map <- 
+  ggplot() +
+  geom_sf(data = ozmaps::abs_ste, colour = "grey40", fill="grey90") + 
+  geom_sf(data = np_wol, fill = "#003366") + # aes(fill ="Wollemi National Park"), 
+  geom_sf(data = np_bmk, fill = "#5566AA") +# aes(fill = "Blue Mountains Kanangra National park"),
+ geom_text(data = map_sf, aes(label = name, geometry = geometry), col="grey50", stat = "sf_coordinates", size = 4) +
+   geom_text(data = info_sf, aes(label = name, geometry = geometry), col=c("#5566AA","#003366"), stat = "sf_coordinates", size = 4) +
+ # scale_fill_manual(name="", values = c("Wollemi National Park" = "#88BBAA","Blue Mountains Kanangra National park" = "#5566AA"))+
+theme_bw() +
+    theme(axis.text.x = element_text(size=10),axis.title.x= element_text(size=10), axis.title.y= element_text(size=10),axis.text.y=element_text(size=10)) +
+    annotation_north_arrow(location = "tr", which_north = "true",  style = north_arrow_orienteering ,  height = unit(1, "cm"), width = unit(1, "cm"))+
+    labs(x = "Longitude", y="Latitude")+
+coord_sf(xlim = c(141,155), c(as.numeric(-42),as.numeric(-25))) 
+
+  ggsave(
+    filename = paste0(WKDir,"map.png"),
+    width = 15,
+    height = 15,
+    dpi = 300)
+
+
+```
+
+
+
+
+```{r}
+world <- map_data("world")
+# Subsetting so its just mainland and tas
+australia <- subset(world, region=="Australia")%>%
+  subset(group == "177" | group == "143")
+  
+  name <- as.data.frame(c("AUSTRALIA"))
+  
+  # aus <- 
+  #   ggplotGrob(
+      ggplot() +
+        geom_map(
+    data = australia, map = australia,
+    aes(long, lat, map_id = region),
+    color = "black", fill ="lightgrey", size = 0.1) +
+    geom_text(data = name, aes(x = mean(australia$long)-1.5, y = mean(australia$lat)), label= name, size=3, fontface = "bold") +
+    #geom_point(data = filtered_site_summary, mapping = aes(x = long, y = lat, colour=species_id,), colour="black",size=0.5)+
+ coord_quickmap()+
+        theme_void()
+  # )
+  
+  
+  
+```
+
+
+```{r}
+tog <- map + annotation_custom(grob = aus, xmin = 150.9, xmax = 151.4,
+                       ymin=-35.4, ymax = -34.8)
+ wdf <- 
+    ggplot() + geom_text(data = filtered_site_summary, aes(x = 1, y = as.numeric(num), label=lab), size=2, hjust = 0) +
+        theme_void() +
+   scale_y_continuous(trans = "reverse") +
+      scale_x_continuous(limits = c(1,1.015))
+   
+  #tog_wdf<- wrap_plots(tog, wdf, ncol = 2, nrow=1,  widths = c(6,2))
+  tog_wdf<- tog
+   
+  ggsave(paste0(basedir,species,"/popgen/map_3.pdf"), device="pdf", plot = tog_wdf, width = 22, height = 35, units = "cm")
+  
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

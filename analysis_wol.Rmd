@@ -35,11 +35,14 @@ setup_terra_for_large_rasters(
 
 run_cost_dist(burn, filename= (paste0(WKDir,"output_wol/cost_surface.tif")), tmp_fn= (paste0(WKDir,"output/temp/")), overwrite = TRUE, maxiter = 25)
 
-#cost_surface <- terra::rast(paste0(WKDir,"output/cost_surface.tif"))
+cost_surface <- terra::rast(paste0(WKDir,"output_wol/cost_surface.tif"))
 
-#cost_surface_wol <-  terra::crop(cost_surface, vect(np_wol_gda94), mask=TRUE) # run and check
-#terra::writeRaster(cost_surface_wol, paste0(WKDir, "output/cost_surface_wol.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
+cost_surface_wol <-  terra::crop(cost_surface, vect(np_wol_gda94), mask=TRUE) # run and check
+terra::writeRaster(cost_surface_wol, paste0(WKDir, "output_wol/cost_surface_wol.tif"), overwrite = TRUE) ## Commented out to prevent re-writing
 cost_surface_wol <- terra::rast(paste0(WKDir, "output_wol/cost_surface_wol.tif"))
+
+plot(cost_surface_wol)
+
 ```
 
 ```{r}
@@ -55,7 +58,7 @@ occ_wol_cost <- pts_cost(occ_wol_comb, cost_surface_wol) # point cost
 
 ```{r}
 occ_wol_cost <- occ_wol_cost %>% filter(uncertainty < 300) # filtering out points with more than 300m of uncertainty in location
-#tax_resources <- load_taxonomic_resources() # load this first run of session
+tax_resources <- load_taxonomic_resources() # load this first run of session
 status <- native_anywhere_in_australia(as.list(occ_wol_cost$species), resources = tax_resources) # using APCalign to extract native/introduced status
 occ_wol_cost <- cbind(occ_wol_cost, status$native_anywhere_in_aus)
 ```
@@ -68,13 +71,55 @@ buff <- st_buffer(np_wol_gda94, dist = 500, nQuadSegs = 30) # 500m buffer for pl
 tr_wol <- st_intersection(wol_tr_gda94, buff) 
 
 occ_wol_cost <- dist_points_to_path(occ_wol_cost, tr_wol) # Calculates crow distance from point to the path.
+```
 
-plot_cost(cost_surface=cost_surface_wol, tr=tr_wol, occ_cost=occ_wol_cost, occ_text=occ_wol_text, cell=100000000, fn=paste0(WKDir,"output_wol/plots/cost_rast_wol.png"))
+```{r}
+bb <- st_bbox(np_wol)
+qu_wol <- bb %>% 
+  opq() %>%
+  add_osm_feature(
+    key= "highway",
+    value = c("primary", "secondary", "tertiary","residential", "unclassified", "service", "escape", "access track", "track", "track", "footway", "steps", "path", "path")
+    )
+
+osm_data_wol <- osmdata_sf(qu_wol)
+
+osm_lines_wol <-osm_data_wol$osm_lines
+osm_gda94_wol <- st_transform(osm_lines_wol, crs = crs(cost_surface_wol))
+bb_wol <- st_bbox(np_wol_gda94)
+osm_background_wol <- st_crop(osm_gda94_wol, bb_wol)
+
+osm_road_wol <-osm_background_wol[osm_background_wol$highway %in% c("trunk", "primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link", "motorway", "motorway_link"),]
+
+tr_wol_croped <- st_intersection(tr_wol, np_wol_gda94)
+
+occ_wol_cost_inat$status.native_anywhere_in_aus <- factor(
+  occ_wol_cost_inat$status.native_anywhere_in_aus,
+  levels = c("unknown", "native", "introduced")
+)
+occ_wol_cost_inat <- occ_wol_cost_inat[order(occ_wol_cost_inat$status.native_anywhere_in_aus == "introduced"), ]
+plot(osm_data_wol$osm_lines$geometry)
+```
+
+```{r}
+ml <- read.csv(paste0(WKDir,"Map locations.csv"), header = TRUE)
+ml_sf <- st_as_sf(ml, coords = c("long", "lat"), crs = 4326)
+ml_sf <- st_transform(ml_sf, crs = crs(cost_surface_wol))
+
+bb_wol <- st_bbox(np_wol_gda94)
+ml_wol <- st_crop(ml_sf, bb_wol)
+ml_wol <- ml_wol[ml_wol$location != "Wollemi National Park",]
+```
+
+```{r}
+plot_cost(cost_surface=cost_surface_wol, osm_background=osm_background_wol, osm_road=osm_road_wol, tr=tr_wol_croped, occ_cost=occ_wol_cost_inat, ml_pk=ml_wol, cell=100000000, fn=paste0(WKDir,"output_wol/plots/cost_rast_wol_inat.png"))
+
+plot_cost(cost_surface=cost_surface_wol, osm_background=osm_background_wol, osm_road=osm_road_wol, tr=tr_wol_croped, occ_cost=occ_wol_cost_herb, ml_pk=ml_wol, cell=100000000, fn=paste0(WKDir,"output_wol/plots/cost_rast_wol_herb.png"))
 ```
 
 
 ```{r}
-grid_sf <- grid_points_cost(n=2000, np_outline=np_wol_gda94, tr=tr_wol, cost_surface=cost_surface_wol)
+grid_sf <- grid_points_cost(n=10000, np_outline=np_wol_gda94, tr=tr_wol, cost_surface=cost_surface_wol)
 ```
 
 

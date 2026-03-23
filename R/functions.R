@@ -31,40 +31,52 @@ pts_cost <- function(occ, cost_surface){
         as_tibble() %>% setNames(c("x","y"))
       pts_cost <- extract_point_costs(cost_surface, pts)
       occ <- cbind(occ, pts_cost)
-      occ$pts_cost<-round(occ$pts_cost,1)
+      occ$pts_cost<-round(occ$pts_cost,3)
      return(occ)
 }
 
-plot_cost <- function(cost_surface, tr, occ_cost, occ_text, cell, fn){
-        cost_plot <-  
-        ggplot() +
-        # cost surface 
-        geom_spatraster(data = cost_surface, maxcell=cell) +
-        scale_fill_gradientn(colours=grDevices::hcl.colors(50, "YlOrRd", rev = TRUE), na.value = "grey90", name="Cost") +
-        # Tracks
-        geom_sf(data = tr, aes(geometry=geometry, color = highway_com), key_glyph = draw_key_path, lwd=0.6) +
-        scale_color_manual(values=c("#7a7a7a","#4E4E4E","#E69F00","black")) +
-        ggnewscale::new_scale_fill() +
-        ggnewscale::new_scale_colour() +
-        # points
-        geom_sf(data = occ_cost, aes(fill = as.factor(status.native_anywhere_in_aus), col=source, geometry = geometry), shape = 21, size = 3, stroke = 1, inherit.aes = FALSE) +
-        scale_fill_manual(values=c("#ABC7C9", "#666633", "#669900"), name = "Native Status") +
-        scale_color_manual(values=c("#FFD700","black"),name = "Data Source") + # only include this when both herbarim and inat data are avalible. 
-        # labels
-        geom_text_repel(data = occ_text, aes(label = pts_cost, geometry = geometry), stat = "sf_coordinates", size = 3, segment.size= 0.2,  max.overlaps = Inf) + #fontface = "bold",
-        # plot design
-        coord_sf() +
-        theme_bw() + theme(legend.key = element_rect(fill="grey90")) +
-        scale_x_continuous( expand = c(0, 0)) +
-        scale_y_continuous(expand = c(0, 0)) +
-        labs(title = "Cost Surface with Tracks")
-      
-      ggsave(
-        filename = fn,
-        width = 40,
-        height = 30,
-        dpi = 300
-      )
+plot_cost <- function(cost_surface,osm_background,osm_road, tr, occ_cost, ml_pk, cell, fn){
+  cost_plot <-  
+    ggplot() +
+    
+    # cost surface 
+    geom_spatraster(data = cost_surface, maxcell=cell,alpha=70,) +
+    scale_fill_gradientn(colours=grDevices::hcl.colors(50, "YlOrBr", rev = TRUE), limits = c(0, 7.5), na.value = "white",name="Cost (Estimated hours)") +
+    
+    # Tracks background
+    geom_sf(data = osm_background, aes(geometry=geometry), key_glyph = draw_key_path, col="grey85", lwd=0.3) +
+    geom_sf(data = osm_road, aes(geometry=geometry),col="grey70", key_glyph = draw_key_path, lwd=0.4) +
+    
+    # Tracks
+    geom_sf(data = tr, aes(geometry=geometry, color = highway_com), key_glyph = draw_key_path, lwd=0.4) +
+    scale_color_manual(values=c("#88BBAA","#5566AA","#BB0011","#E69F00"), name ="Track Type") + 
+    ggnewscale::new_scale_colour() +
+    
+    # outline
+    #geom_sf(data = np_wol_gda94, aes(geometry=geometry), key_glyph = draw_key_path, col="white",fill=NA, lwd=1) +
+    
+    # points
+    geom_sf(data = occ_cost, aes(colour = as.factor(status.native_anywhere_in_aus), size = as.factor(status.native_anywhere_in_aus), geometry = geometry), shape = 16, stroke = 1, inherit.aes = FALSE) +
+    scale_colour_manual(values = if (length(unique(occ_cost$status.native_anywhere_in_aus)) == 2) { c( "#666633","#99BB55") } else { c("#99BB55", "#666633", "orange")}, name = "Native Status" ) +
+    scale_size_manual(values = if (length(unique(occ_cost$status.native_anywhere_in_aus)) == 2) { c(3, 3)} else { c(3, 3, 2)},name = "Native Status")+
+    
+    geom_text(data = ml_pk, aes(label = location, geometry = geometry), col="grey40", stat = "sf_coordinates", size = 3) +
+    
+    # plot design
+    coord_sf() +
+    theme_bw() + theme(legend.key = element_rect(fill="grey90")) +
+    scale_x_continuous( expand = c(0, 0)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    annotation_scale(location = "br", width_hint = 0.2) +
+    annotation_north_arrow(location = "tl", which_north = "true",  style = north_arrow_orienteering ,  height = unit(1, "cm"), width = unit(1, "cm"))+
+    labs(x = "Longitude", y="Latitude")
+  
+  ggsave(
+    filename = fn,
+    width = 40,
+    height = 30,
+    dpi = 300
+  )
 }
 
 grid_points_cost <- function (n, np_outline, tr,cost_surface){
@@ -77,7 +89,7 @@ grid_points_cost <- function (n, np_outline, tr,cost_surface){
           as_tibble() %>% setNames(c("x","y"))
         pts_grid_cost <- extract_point_costs(cost_surface, pts_grid)
         grid_sf <- cbind(grid_sf, pts_grid_cost)
-        grid_sf$pts_cost<-round(grid_sf$pts_grid_cost,1)
+        grid_sf$pts_cost<-round(grid_sf$pts_grid_cost,3)
     return(grid_sf)
 }
 
