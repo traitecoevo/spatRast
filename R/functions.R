@@ -41,14 +41,14 @@ plot_cost <- function(cost_surface,osm_background,osm_road, tr, occ_cost, ml_pk,
     
     # cost surface 
     geom_spatraster(data = cost_surface, maxcell=cell,alpha=70,) +
-    scale_fill_gradientn(colours=grDevices::hcl.colors(50, "YlOrBr", rev = TRUE), limits = c(0, 7.5), na.value = "white",name="Cost (Estimated hours)") +
+    scale_fill_gradientn(colours=grDevices::hcl.colors(50, "YlOrBr", rev = TRUE), limits = c(0, 9), na.value = "white",name="Cost (Estimated hours)") +
     
     # Tracks background
     geom_sf(data = osm_background, aes(geometry=geometry), key_glyph = draw_key_path, col="grey85", lwd=0.3) +
-    geom_sf(data = osm_road, aes(geometry=geometry),col="grey70", key_glyph = draw_key_path, lwd=0.4) +
+    geom_sf(data = osm_road, aes(geometry=geometry),col="grey70", key_glyph = draw_key_path, lwd=0.35) +
     
     # Tracks
-    geom_sf(data = tr, aes(geometry=geometry, color = highway_com), key_glyph = draw_key_path, lwd=0.4) +
+    geom_sf(data = tr, aes(geometry=geometry, color = highway_com), key_glyph = draw_key_path, lwd=0.35) +
     scale_color_manual(values=c("#88BBAA","#5566AA","#BB0011","#E69F00"), name ="Track Type") + 
     ggnewscale::new_scale_colour() +
     
@@ -58,9 +58,9 @@ plot_cost <- function(cost_surface,osm_background,osm_road, tr, occ_cost, ml_pk,
     # points
     geom_sf(data = occ_cost, aes(colour = as.factor(status.native_anywhere_in_aus), size = as.factor(status.native_anywhere_in_aus), geometry = geometry), shape = 16, stroke = 1, inherit.aes = FALSE) +
     scale_colour_manual(values = if (length(unique(occ_cost$status.native_anywhere_in_aus)) == 2) { c( "#666633","#99BB55") } else { c("#99BB55", "#666633", "orange")}, name = "Native Status" ) +
-    scale_size_manual(values = if (length(unique(occ_cost$status.native_anywhere_in_aus)) == 2) { c(3, 3)} else { c(3, 3, 2)},name = "Native Status")+
+    scale_size_manual(values = if (length(unique(occ_cost$status.native_anywhere_in_aus)) == 2) { c(1.8, 1.8)} else { c(1.8, 1.8, 1.2)},name = "Native Status")+
     
-    geom_text(data = ml_pk, aes(label = location, geometry = geometry), col="grey40", stat = "sf_coordinates", size = 3) +
+    geom_text(data = ml_pk, aes(label = location, geometry = geometry), col="grey40", stat = "sf_coordinates", size = 2) +
     
     # plot design
     coord_sf() +
@@ -73,9 +73,9 @@ plot_cost <- function(cost_surface,osm_background,osm_road, tr, occ_cost, ml_pk,
   
   ggsave(
     filename = fn,
-    width = 40,
-    height = 30,
-    dpi = 300
+    width = 20,
+    height = 18,
+    dpi = 300,
   )
 }
 
@@ -94,14 +94,16 @@ grid_points_cost <- function (n, np_outline, tr,cost_surface){
 }
 
 
-cost_v_dist_plot <- function(grid_sf, occ, extra, top_layer_points, fn, cols){
+cost_v_dist_plot <- function(grid_sf, occ, extra, top_layer_points, fn, cols, col_type){
         cost_v_dist <- 
           ggplot() +
           geom_point(data=grid_sf, mapping=aes(x=near_dist, y=pts_cost), colour="grey90") +
+          geom_smooth(data=grid_sf,mapping=aes(x=near_dist, y=pts_cost), method='lm', formula=y ~ x, colour="grey80")+
           geom_point(data=occ, mapping=aes(x=near_dist, y=pts_cost, fill=status.native_anywhere_in_aus), shape=21, colour="black", size=2) +
           scale_fill_manual(values=cols,name = "Native Status") +
           new_scale_fill() +
-          {if(extra)geom_point(data=top_layer_points, mapping=aes(x=near_dist, y=pts_cost), shape=21, fill="#ABC7C9", colour="black", size=2)} +
+          {if(extra)geom_point(data=top_layer_points, mapping=aes(x=near_dist, y=pts_cost), shape=21, fill="#E69F00", colour="black", size=2)} +
+          geom_smooth(data=occ,mapping=aes(x=near_dist, y=pts_cost), method='lm', formula=y ~ x, colour=col_type)+
           theme_bw() + 
           theme(legend.position = c(0.98, 0.02),
                 legend.justification = c(1, 0),
@@ -118,7 +120,7 @@ cost_v_dist_plot <- function(grid_sf, occ, extra, top_layer_points, fn, cols){
           geom_histogram(data=grid_sf, mapping=aes(x=near_dist), , bins = 100, position = "identity",fill="grey90", colour="grey90") +
           geom_histogram(data=occ, mapping= aes(x = near_dist, fill = status.native_anywhere_in_aus), bins = 100, position = "identity",) + 
           scale_fill_manual(values=cols,name = "Native Status") +
-          {if(extra)geom_histogram(data=top_layer_points, mapping= aes(x = near_dist), bins = 100, position = "identity",fill="#ABC7C9")} +    
+          {if(extra)geom_histogram(data=top_layer_points, mapping= aes(x = near_dist), bins = 100, position = "identity",fill="#E69F00")} +    
           theme_bw() +
           theme(axis.line = element_blank(), 
                 axis.text.x = element_blank(),
@@ -139,7 +141,7 @@ cost_v_dist_plot <- function(grid_sf, occ, extra, top_layer_points, fn, cols){
           geom_histogram(data=grid_sf, mapping=aes(x=pts_cost), bins = 100, position = "identity", fill="grey90", colour="grey90") +
           geom_histogram(data=occ, mapping= aes(x = pts_cost, fill = status.native_anywhere_in_aus),bins = 100, position = "identity",) + 
           scale_fill_manual(values=cols,name = "Native Status") +
-          {if(extra)geom_histogram(data=top_layer_points, mapping= aes(x = pts_cost), bins = 100, position = "identity", fill="#ABC7C9")} +
+          {if(extra)geom_histogram(data=top_layer_points, mapping= aes(x = pts_cost), bins = 100, position = "identity", fill="#E69F00")} +
           theme_bw() + 
           theme(axis.line = element_blank(), 
                 axis.text.y = element_blank(),
@@ -166,3 +168,15 @@ cost_v_dist_plot <- function(grid_sf, occ, extra, top_layer_points, fn, cols){
         dpi = 300
       )
 }
+
+ext_slope <- function(occ, slope_rast){
+  pts_vect <- terra::vect(occ)
+  pts_slope <- terra::extract(slope_rast, pts_vect)
+  pts_slope <- subset(pts_slope, select = -ID )
+  occ <- cbind(occ, pts_slope)
+  occ$slope <- as.numeric(occ$slope)
+  occ$slope<-round(occ$slope,0)
+  return(occ)
+}
+
+

@@ -16,6 +16,7 @@ library(tictoc)
 
 galah_config(email = "jordanmirandamay@gmail.com", atlas = "Australia")
 source(paste0(WKDir,"R/functions.R"))
+
 ```
 
 ```{r}
@@ -160,6 +161,11 @@ wol_tr_gda94 <- st_transform(wol_tr, crs = crs(slope_wol)) # Tracks
 occ_wol_gda94 <- st_transform(occ_wol, crs = crs(slope_wol)) # iNaturalist occurrences
 occ_wol_herb_gda94 <- st_transform(occ_wol_herb, crs = crs(slope_wol)) # herbarium occurrences
 #saveRDS(wol_tr_gda94, paste0(WKDir,"data/tracks/tracks_clean.rds"))
+```
+
+```{r}
+length_wol_tr <-st_length(wol_tr_gda94)
+total_length_wol <- sum(length_wol_tr)
 ```
 
 
