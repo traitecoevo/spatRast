@@ -47,6 +47,8 @@ terra::writeRaster(cost_surface_wol, paste0(WKDir, "output_wol/cost_surface_wol.
 cost_surface_wol <- terra::rast(paste0(WKDir, "output_wol/cost_surface_wol.tif"))
 ```
 
+
+# combining inat and herb
 ```{r}
 # combining herb and iNat
 occ_wol_comb <- rbind(occ_wol_gda94, occ_wol_herb_gda94)
@@ -59,10 +61,22 @@ occ_wol_cost <- pts_cost(occ_wol_comb, cost_surface_wol) # point cost
 
 
 ```{r}
+#st_write(occ_wol_cost, paste0(WKDir, "output_wol/occ_wol_cost.gpkg"))
+occ_wol_cost <- st_read(paste0(WKDir, "output_wol/occ_wol_cost.gpkg"))
+```
+
+
+```{r}
 occ_wol_cost <- occ_wol_cost %>% filter(uncertainty < 300) # filtering out points with more than 300m of uncertainty in location
 tax_resources <- load_taxonomic_resources() # load this first run of session
 status <- native_anywhere_in_australia(as.list(occ_wol_cost$species), resources = tax_resources) # using APCalign to extract native/introduced status
 occ_wol_cost <- cbind(occ_wol_cost, status$native_anywhere_in_aus)
+
+occ_wol_cost <- occ_wol_cost %>%
+  mutate(status.native_anywhere_in_aus = recode(status.native_anywhere_in_aus,
+                         "introduced" = "Introduced",
+                         "native" = "Native",
+                         "unknown" = "Only identified to genus or above"))
 ```
 
 
@@ -79,22 +93,26 @@ occ_wol_cost <- dist_points_to_path(occ_wol_cost, tr_wol) # Calculates crow dist
 #cost vers dist plots
 # iNaturalist
 occ_wol_cost_inat <- occ_wol_cost %>% filter(source == "iNaturalist")
-introduced <- occ_wol_cost_inat %>% filter(status.native_anywhere_in_aus == "introduced")
+introduced <- occ_wol_cost_inat %>% filter(status.native_anywhere_in_aus == "Introduced")
 grid_wol_inat <- grid_points_cost(n = nrow(occ_wol_cost_inat), np_outline = np_wol_gda94, tr = tr_wol, cost_surface = cost_surface_wol)
-col_inat <- "#5566AA"
 
-cost_v_dist_plot(grid_wol_inat, occ_wol_cost_inat, extra=TRUE, top_layer_points = introduced, cols=c("#E69F00", "#666633", "#669900"),col_type=col_inat, fn = paste0(WKDir,"output_wol/plots/cost_v_dist_inat.png"))
+occ_wol_cost_inat$status.native_anywhere_in_aus <- factor(
+  occ_wol_cost_inat$status.native_anywhere_in_aus,
+  levels = c("Native","Only identified to genus or above", "Introduced"))
+#col_inat <- "#5566AA"
+
+cost_v_dist_plot(grid_wol_inat, occ_wol_cost_inat, extra=TRUE, top_layer_points = introduced, cols=c("#666633","#669900","#E69F00"),col_type=col_inat, fn = paste0(WKDir,"output_wol/plots/cost_v_dist_inat.png"))
 
 # Herbarium
 occ_wol_cost_herb <- occ_wol_cost %>% filter(source == "Herbarium")
 grid_wol_herb <- grid_points_cost(n = nrow(occ_wol_cost_herb), np_outline = np_wol_gda94, tr = tr_wol, cost_surface = cost_surface_wol)
-col_herb <- "#BB0011"
+
+occ_wol_cost_herb$status.native_anywhere_in_aus <- factor(
+  occ_wol_cost_herb$status.native_anywhere_in_aus,
+  levels = c("Native","Only identified to genus or above"))
+#col_herb <- "#BB0011"
 
 cost_v_dist_plot(grid_wol_herb, occ_wol_cost_herb, extra=FALSE, cols= c("#666633","#669900"), col_type=col_herb, fn=paste0(WKDir,"output_wol/plots/cost_v_dist_herb.png"))
-```
-
-```{r}
-    
 ```
 
 
@@ -164,9 +182,9 @@ tr_wol_croped <- st_intersection(tr_wol, np_wol_gda94)
 
 occ_wol_cost_inat$status.native_anywhere_in_aus <- factor(
   occ_wol_cost_inat$status.native_anywhere_in_aus,
-  levels = c("unknown", "native", "introduced")
+  levels = c("Native","Only identified to genus or above", "Introduced")
 )
-occ_wol_cost_inat <- occ_wol_cost_inat[order(occ_wol_cost_inat$status.native_anywhere_in_aus == "introduced"), ]
+occ_wol_cost_inat <- occ_wol_cost_inat[order(occ_wol_cost_inat$status.native_anywhere_in_aus == "Only identified to genus or above"), ]
 
 ```
 
@@ -181,7 +199,9 @@ ml_wol <- ml_wol[ml_wol$location != "Wollemi National Park",]
 ```
 
 ```{r}
+
 plot_cost(cost_surface=cost_surface_wol, osm_background=osm_background_wol, osm_road=osm_road_wol, tr=tr_wol_croped, occ_cost=occ_wol_cost_inat, ml_pk=ml_wol, cell=100000000, fn=paste0(WKDir,"output_wol/plots/cost_rast_wol_inat.png"))
+
 
 plot_cost(cost_surface=cost_surface_wol, osm_background=osm_background_wol, osm_road=osm_road_wol, tr=tr_wol_croped, occ_cost=occ_wol_cost_herb, ml_pk=ml_wol, cell=100000000, fn=paste0(WKDir,"output_wol/plots/cost_rast_wol_herb.png"))
 ```
@@ -231,8 +251,8 @@ cost_plot <-
     
     # points
     geom_sf(data = crop_occ_wol_cost_inat, aes(colour = as.factor(status.native_anywhere_in_aus), size = as.factor(status.native_anywhere_in_aus), geometry = geometry), shape = 16, stroke = 1, inherit.aes = FALSE) +
-    scale_colour_manual(values = c("#99BB55","#666633","orange"), name = "Native Status" ) +
-    scale_size_manual(values =c(2, 2,1.5),name = "Native Status")+
+    scale_colour_manual(values = c("#666633","#99BB55","orange"), name = "Native Status" ) +
+    scale_size_manual(values =c(2, 2,2),name = "Native Status")+
     
     geom_text(data = crop_ml_wol, aes(label = location, geometry = geometry), col="grey40", stat = "sf_coordinates", size = 3) +
   annotation_scale(location = "br", width_hint = 0.2) +
@@ -272,8 +292,8 @@ max(occ_wol_cost_inat$pts_cost, na.rm = TRUE)
 sum(is.na(occ_wol_cost_herb$pts_cost))
 sum(is.na(occ_wol_cost_inat$pts_cost))
 
-sum(occ_wol_cost_inat$status.native_anywhere_in_aus=="unknown")
-sum(occ_wol_cost_herb$status.native_anywhere_in_aus=="unknown")
+sum(occ_wol_cost_inat$status.native_anywhere_in_aus=="Only identified to genus or above")
+sum(occ_wol_cost_herb$status.native_anywhere_in_aus=="Only identified to genus or above")
 
 ```
 

@@ -49,10 +49,10 @@ wol_tr$highway_com <- wol_tr$highway
 
 wol_tr <- wol_tr %>%
   mutate(highway_com = case_when(
-    highway %in% c("primary", "secondary", "tertiary") ~ "road",
-    highway %in% c("residential", "unclassified", "service", "escape") ~ "access track",
-    highway %in% c("track") ~ "track",
-    highway %in% c("footway", "steps", "path") ~ "path",))
+    highway %in% c("primary", "secondary", "tertiary") ~ "Road",
+    highway %in% c("residential", "unclassified", "service", "escape") ~ "Access track",
+    highway %in% c("track") ~ "Track",
+    highway %in% c("footway", "steps", "path") ~ "Path",))
 
 plot(wol_tr$geometry)
 ```

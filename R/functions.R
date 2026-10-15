@@ -49,22 +49,34 @@ plot_cost <- function(cost_surface,osm_background,osm_road, tr, occ_cost, ml_pk,
     
     # Tracks
     geom_sf(data = tr, aes(geometry=geometry, color = highway_com), key_glyph = draw_key_path, lwd=0.35) +
-    scale_color_manual(values=c("#88BBAA","#5566AA","#BB0011","#E69F00"), name ="Track Type") + 
+    scale_color_manual(values=c("#88BBAA","#5566AA","#BB0011","#E69F00"), name ="Track Type", guide = guide_legend(override.aes = list(linewidth = 1.5))) + 
     ggnewscale::new_scale_colour() +
     
     # outline
     #geom_sf(data = np_wol_gda94, aes(geometry=geometry), key_glyph = draw_key_path, col="white",fill=NA, lwd=1) +
     
     # points
-    geom_sf(data = occ_cost, aes(colour = as.factor(status.native_anywhere_in_aus), size = as.factor(status.native_anywhere_in_aus), geometry = geometry), shape = 16, stroke = 1, inherit.aes = FALSE) +
-    scale_colour_manual(values = if (length(unique(occ_cost$status.native_anywhere_in_aus)) == 2) { c( "#666633","#99BB55") } else { c("#99BB55", "#666633", "orange")}, name = "Native Status" ) +
-    scale_size_manual(values = if (length(unique(occ_cost$status.native_anywhere_in_aus)) == 2) { c(1.8, 1.8)} else { c(1.8, 1.8, 1.2)},name = "Native Status")+
+    geom_sf(data = occ_cost, aes(colour = status.native_anywhere_in_aus, size = status.native_anywhere_in_aus, geometry = geometry), shape = 16, stroke = 1, inherit.aes = FALSE) +
+    scale_colour_manual(values = if (length(unique(occ_cost$status.native_anywhere_in_aus)) == 2) { c( "#666633","#99BB55") } else { c("#666633","#99BB55", "orange")}, name = "Native Status" ) +
+    scale_size_manual(values = if (length(unique(occ_cost$status.native_anywhere_in_aus)) == 2) { c(1.8, 1.2)} else { c(1.8, 1.2, 1.8)},name = "Native Status",  guide = guide_legend(override.aes = list(size = 4)))+
     
     geom_text(data = ml_pk, aes(label = location, geometry = geometry), col="grey40", stat = "sf_coordinates", size = 2) +
     
     # plot design
     coord_sf() +
-    theme_bw() + theme(legend.key = element_rect(fill="grey90")) +
+    theme_bw() + theme( legend.box = "vertical",
+                        legend.box.background = element_rect(colour = "black",fill = NA,linewidth = 0.3),
+                        legend.box.margin = margin(6, 6, 6, 6),
+                         legend.title = element_text(size = 14),
+                         legend.text  = element_text(size = 12),
+                         legend.key.size = unit(1, "cm"), 
+                         # X axis
+                         axis.title.x = element_text(size = 14),
+                         axis.text.x  = element_text(size = 12),
+                         # Y axis
+                         axis.title.y = element_text(size = 14),
+                         axis.text.y  = element_text(size = 12)
+                       ) +
     scale_x_continuous( expand = c(0, 0)) +
     scale_y_continuous(expand = c(0, 0)) +
     annotation_scale(location = "br", width_hint = 0.2) +
@@ -98,12 +110,12 @@ cost_v_dist_plot <- function(grid_sf, occ, extra, top_layer_points, fn, cols, co
         cost_v_dist <- 
           ggplot() +
           geom_point(data=grid_sf, mapping=aes(x=near_dist, y=pts_cost), colour="grey90") +
-          geom_smooth(data=grid_sf,mapping=aes(x=near_dist, y=pts_cost), method='lm', formula=y ~ x, colour="grey80")+
+          #geom_smooth(data=grid_sf,mapping=aes(x=near_dist, y=pts_cost), method='lm', formula=y ~ x, colour="grey80")+
           geom_point(data=occ, mapping=aes(x=near_dist, y=pts_cost, fill=status.native_anywhere_in_aus), shape=21, colour="black", size=2) +
           scale_fill_manual(values=cols,name = "Native Status") +
           new_scale_fill() +
           {if(extra)geom_point(data=top_layer_points, mapping=aes(x=near_dist, y=pts_cost), shape=21, fill="#E69F00", colour="black", size=2)} +
-          geom_smooth(data=occ,mapping=aes(x=near_dist, y=pts_cost), method='lm', formula=y ~ x, colour=col_type)+
+          #geom_smooth(data=occ,mapping=aes(x=near_dist, y=pts_cost), method='lm', formula=y ~ x, colour=col_type)+
           theme_bw() + 
           theme(legend.position = c(0.98, 0.02),
                 legend.justification = c(1, 0),
@@ -111,7 +123,7 @@ cost_v_dist_plot <- function(grid_sf, occ, extra, top_layer_points, fn, cols, co
                 legend.key = element_rect(fill = "white"),
                 plot.margin = margin(0, 0, 0, 0,  unit = "pt"),
           ) +
-          labs(title = NULL, x= "Distance (km)", y="Cost") +
+          labs(title = NULL, x= "Distance from track (km)", y= "Cost (h)") +
           scale_x_continuous(expand = c(0.01,0.01)) +
           scale_y_continuous(expand = c(0.01,0.01))
 

@@ -61,10 +61,10 @@ bmk_tr$highway_com <- bmk_tr$highway
 
 bmk_tr <- bmk_tr %>%
   mutate(highway_com = case_when(
-    highway %in% c("trunk", "primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link", "motorway", "motorway_link") ~ "road",
-    highway %in% c("residential", "unclassified", "service", "escape", "trunk_link", "pedestrian", "living_street", "cycleway", "busway", "corridor", "services") ~ "access track",
-    highway %in% c("track") ~ "track",
-    highway %in% c("footway", "steps", "path", "scramble") ~ "path"
+    highway %in% c("trunk", "primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link", "motorway", "motorway_link") ~ "Road",
+    highway %in% c("residential", "unclassified", "service", "escape", "trunk_link", "pedestrian", "living_street", "cycleway", "busway", "corridor", "services") ~ "Access track",
+    highway %in% c("track") ~ "Track",
+    highway %in% c("footway", "steps", "path", "scramble") ~ "Path"
   ))
 ```
 
@@ -289,10 +289,22 @@ occ_bmk_cost <- pts_cost(occ_bmk_comb, cost_surface_bmk) # point cost
 
 
 ```{r}
+#st_write(occ_bmk_cost, paste0(WKDir, "output_bmk/occ_bmk_cost.gpkg"))
+occ_bmk_cost <- st_read(paste0(WKDir, "output_wol/occ_wol_cost.gpkg"))
+```
+
+
+```{r}
 occ_bmk_cost <- occ_bmk_cost %>% filter(uncertainty < 300) # filtering out points with more than 300m of uncertainty in location
 #tax_resources <- load_taxonomic_resources() # load this first run of session
 status <- native_anywhere_in_australia(as.list(occ_bmk_cost$species), resources = tax_resources) # using APCalign to extract native/introduced status
 occ_bmk_cost <- cbind(occ_bmk_cost, status$native_anywhere_in_aus)
+
+occ_bmk_cost <- occ_bmk_cost %>%
+  mutate(status.native_anywhere_in_aus = recode(status.native_anywhere_in_aus,
+                         "introduced" = "Introduced",
+                         "native" = "Native",
+                         "unknown" = "Only identified to genus or above"))
 ```
 
 
@@ -310,16 +322,25 @@ occ_bmk_cost <- dist_points_to_path(occ_bmk_cost, tr_bmk) # Calculates crow dist
 # cost vers dist plots
 # iNaturalist
 occ_bmk_cost_inat <- occ_bmk_cost %>% filter(source == "iNaturalist")
-introduced <- occ_bmk_cost_inat %>% filter(status.native_anywhere_in_aus == "introduced")
+introduced <- occ_bmk_cost_inat %>% filter(status.native_anywhere_in_aus == "Introduced")
 grid_bmk_inat <- grid_points_cost(n = nrow(occ_bmk_cost_inat), np_outline = np_bmk_gda94, tr = tr_bmk, cost_surface = cost_surface_bmk)
-col_inat <- "#5566AA"
 
-cost_v_dist_plot(grid_bmk_inat, occ_bmk_cost_inat, extra = TRUE, top_layer_points = introduced, cols = c("#E69F00", "#666633", "#669900"), col_type=col_inat, fn = paste0(WKDir, "output_bmk/plots/cost_v_dist_inat.png"))
+occ_bmk_cost_inat$status.native_anywhere_in_aus <- factor(
+  occ_bmk_cost_inat$status.native_anywhere_in_aus,
+  levels = c("Native","Only identified to genus or above", "Introduced"))
+
+#col_inat <- "#5566AA"
+
+cost_v_dist_plot(grid_bmk_inat, occ_bmk_cost_inat, extra = TRUE, top_layer_points = introduced, cols = c("#666633","#669900","#E69F00"), col_type=col_inat, fn = paste0(WKDir, "output_bmk/plots/cost_v_dist_inat.png"))
 
 # Herbarium
 occ_bmk_cost_herb <- occ_bmk_cost %>% filter(source == "Herbarium")
 grid_bmk_herb <- grid_points_cost(n = nrow(occ_bmk_cost_herb), np_outline = np_bmk_gda94, tr = tr_bmk, cost_surface = cost_surface_bmk)
-col_herb <- "#BB0011"
+
+occ_bmk_cost_herb$status.native_anywhere_in_aus <- factor(
+  occ_bmk_cost_herb$status.native_anywhere_in_aus,
+  levels = c("Native","Only identified to genus or above"))
+#col_herb <- "#BB0011"
 
 cost_v_dist_plot(grid_bmk_herb, occ_bmk_cost_herb, extra = FALSE, cols = c("#666633", "#669900"), col_type=col_herb, fn = paste0(WKDir, "output_bmk/plots/cost_v_dist_herb.png"))
 
@@ -332,13 +353,6 @@ lm_bmk_inat <- lm(pts_cost ~ near_dist, data=occ_bmk_cost_inat)
 summary(lm_bmk_inat)
 plot(lm_bmk_inat, which = 1)
 ```
-
-
-
-
-
-
-
 
 
 
@@ -415,16 +429,11 @@ ml_bmk <- st_crop(ml_sf, bb_bmk)
 ml_bmk <- ml_bmk[ml_bmk$location != "Blue Mountaians National Park",]
 ```
 
-
 ```{r}
 plot_cost(cost_surface=cost_surface_bmk, osm_background=osm_background_bmk, osm_road=osm_road_bmk, tr=tr_bmk_croped, occ_cost=occ_bmk_cost_inat, ml_pk=ml_bmk, cell=100000000, fn=paste0(WKDir,"output_bmk/plots/cost_rast_bmk_inat.png"))
-```
 
-
-```{r}
 plot_cost(cost_surface=cost_surface_bmk, osm_background=osm_background_bmk, osm_road=osm_road_bmk, tr=tr_bmk_croped, occ_cost=occ_bmk_cost_herb, ml_pk=ml_bmk, cell=100000000, fn=paste0(WKDir,"output_bmk/plots/cost_rast_bmk_herb.png"))
 ```
-
 
 
 
@@ -470,7 +479,7 @@ cost_plot <-
     
     # points
     geom_sf(data = crop_occ_bmk_cost_herb, aes(colour = as.factor(status.native_anywhere_in_aus), size = as.factor(status.native_anywhere_in_aus), geometry = geometry), shape = 16, stroke = 1, inherit.aes = FALSE) +
-    scale_colour_manual(values = if (length(unique(crop_occ_bmk_cost_herb$status.native_anywhere_in_aus)) == 2) { c( "#666633","#99BB55") } else { c("#99BB55", "#666633", "orange")}, name = "Native Status" ) +
+    scale_colour_manual(values = if (length(unique(crop_occ_bmk_cost_herb$status.native_anywhere_in_aus)) == 2) { c( "#666633","#99BB55") } else { c("#666633","#99BB55","orange")}, name = "Native Status" ) +
     scale_size_manual(values = if (length(unique(crop_occ_bmk_cost_herb$status.native_anywhere_in_aus)) == 2) { c(2, 2)} else { c(2, 2, 2)},name = "Native Status")+
     
     geom_text(data = crop_ml_bmk, aes(label = location, geometry = geometry), col="grey40", stat = "sf_coordinates", size = 3) +
